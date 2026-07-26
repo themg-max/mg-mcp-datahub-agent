@@ -1,0 +1,67 @@
+{
+  "objective": "Update the customer-profile data pipeline with a bounded, reviewable mapping change.",
+  "allowedScope": [
+    "src/pipelines/customer-profile.ts",
+    "tests/customer-profile.test.ts",
+    "docs/customer-profile-change-notes.md"
+  ],
+  "blockedScope": [
+    "Any deployment, secret, IAM, or GitHub write action",
+    "Any use of planning-only or quarantined evidence as authority"
+  ],
+  "requiredValidation": [
+    "Run customer-profile unit tests",
+    "Have a human reviewer confirm the approved context and blocked scope"
+  ],
+  "source": {
+    "entities": [
+      {
+        "urn": "urn:ctxops:architecture:customer-profile-pipeline:v3",
+        "title": "Customer Profile Pipeline Architecture v3",
+        "description": "Approved architecture for customer-profile normalization and routing.",
+        "authority": "approved",
+        "tags": ["pipeline", "customer-profile", "architecture"],
+        "constraints": ["Keep the file set bounded to the approved pipeline change."],
+        "blockedUses": [],
+        "sourceType": "datahub_document",
+        "canonicalUrl": "https://catalog.example/architecture/customer-profile-pipeline-v3",
+        "retrievedAt": "2026-07-20T12:00:00.000Z"
+      },
+      {
+        "urn": "urn:ctxops:proposal:customer-profile-enrichment:v1",
+        "title": "Customer Profile Enrichment Proposal",
+        "description": "Planning-only idea for an enrichment step that is not approved for implementation.",
+        "authority": "planning_only",
+        "tags": ["proposal", "planning"],
+        "constraints": ["Cannot authorize implementation."],
+        "blockedUses": ["Do not use to approve implementation without approved evidence."],
+        "sourceType": "datahub_proposal",
+        "canonicalUrl": "https://catalog.example/proposals/customer-profile-enrichment-v1",
+        "retrievedAt": "2026-07-20T12:00:00.000Z"
+      },
+      {
+        "urn": "urn:ctxops:incident:customer-profile-conflict:2026-06-14",
+        "title": "Customer Profile Mapping Conflict",
+        "description": "Quarantined conflict report describing a legacy branch discrepancy.",
+        "authority": "quarantined",
+        "tags": ["incident", "quarantine"],
+        "constraints": ["Do not reuse the legacy mapping branch."],
+        "blockedUses": ["Do not use in planning or implementation decisions."],
+        "sourceType": "datahub_incident",
+        "canonicalUrl": "https://catalog.example/incidents/customer-profile-conflict-2026-06-14",
+        "retrievedAt": "2026-07-20T12:00:00.000Z"
+      },
+      {
+        "urn": "urn:ctxops:dependency:customer-risk-lookup",
+        "title": "Customer Risk Lookup Dependency",
+        "description": "Missing compatibility metadata leaves this dependency in an unknown state.",
+        "tags": ["dependency", "unknown"],
+        "constraints": ["Compatibility is unverified."],
+        "blockedUses": [],
+        "sourceType": "datahub_dependency",
+        "canonicalUrl": "https://catalog.example/dependencies/customer-risk-lookup",
+        "retrievedAt": "2026-07-20T12:00:00.000Z"
+      }
+    ]
+  }
+}

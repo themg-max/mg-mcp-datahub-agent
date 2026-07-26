@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    # Run CI for pushes to non-main branches
+    branches-ignore: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Demo JSON
+        run: npm run --silent demo:json > /tmp/mg-contextops-demo.json && node -e "const v=JSON.parse(require('node:fs').readFileSync('/tmp/mg-contextops-demo.json', 'utf8')); if (v.workPacket?.humanApprovalRequired !== true) throw new Error('invalid governed packet')"

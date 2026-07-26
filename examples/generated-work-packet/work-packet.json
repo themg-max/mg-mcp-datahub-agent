@@ -1,0 +1,147 @@
+{
+  "objective": "Propose a safe update to customer-profile pipeline mapping rules for normalized profile tier labels.",
+  "currentContext": [
+    {
+      "id": "urn:ctxops:architecture:customer-profile-pipeline:v3",
+      "title": "Customer Profile Pipeline Architecture v3",
+      "summary": "Approved architecture for ingestion, normalization, and profile tier enrichment in the customer-profile pipeline.",
+      "authority": "approved",
+      "provenance": [
+        {
+          "id": "urn:ctxops:architecture:customer-profile-pipeline:v3",
+          "title": "Customer Profile Pipeline Architecture v3",
+          "canonicalUrl": "https://catalog.example/architecture/customer-profile-pipeline-v3",
+          "sourceType": "datahub_document",
+          "retrievedAt": "2026-07-20T12:00:00.000Z"
+        }
+      ],
+      "tags": ["pipeline", "customer-profile", "architecture"],
+      "constraints": [
+        "Maintain backward-compatible schema for profile_tier field.",
+        "All mapping changes must include unit and integration validation evidence."
+      ],
+      "blockedUses": []
+    },
+    {
+      "id": "urn:ctxops:proposal:profile-tier-logic:v1",
+      "title": "Proposal: Dynamic Profile Tier Reclassification",
+      "summary": "Planning-only proposal for adding event-driven tier recalculation based on recent order activity.",
+      "authority": "planning_only",
+      "provenance": [
+        {
+          "id": "urn:ctxops:proposal:profile-tier-logic:v1",
+          "title": "Proposal: Dynamic Profile Tier Reclassification",
+          "canonicalUrl": "https://catalog.example/proposals/profile-tier-logic-v1",
+          "sourceType": "datahub_proposal",
+          "retrievedAt": "2026-07-20T12:00:00.000Z"
+        }
+      ],
+      "tags": ["proposal", "customer-profile", "planning"],
+      "constraints": [
+        "Cannot authorize production changes without approved architecture update."
+      ],
+      "blockedUses": [
+        "Do not use to approve implementation without approved evidence.",
+        "Do not use for deployment approval."
+      ]
+    },
+    {
+      "id": "urn:ctxops:incident:profile-tier-conflict:2026-06-14",
+      "title": "Quarantined: Profile Tier Mapping Conflict Incident",
+      "summary": "Quarantined incident record describing conflicting transformation logic discovered in a legacy branch.",
+      "authority": "quarantined",
+      "provenance": [
+        {
+          "id": "urn:ctxops:incident:profile-tier-conflict:2026-06-14",
+          "title": "Quarantined: Profile Tier Mapping Conflict Incident",
+          "canonicalUrl": "https://catalog.example/incidents/profile-tier-conflict-2026-06-14",
+          "sourceType": "datahub_incident",
+          "retrievedAt": "2026-07-20T12:00:00.000Z"
+        }
+      ],
+      "tags": ["incident", "conflict", "quarantined"],
+      "constraints": [
+        "Legacy mapping branch must not be reused until conflict is resolved."
+      ],
+      "blockedUses": [
+        "Do not use in planning or implementation decisions.",
+        "Do not use for deployment approval."
+      ]
+    },
+    {
+      "id": "urn:ctxops:dependency:customer-risk-lookup",
+      "title": "Customer Risk Lookup Dependency",
+      "summary": "Dependency state is unknown because the latest compatibility metadata is missing.",
+      "authority": "unknown",
+      "provenance": [
+        {
+          "id": "urn:ctxops:dependency:customer-risk-lookup",
+          "title": "Customer Risk Lookup Dependency",
+          "canonicalUrl": "https://catalog.example/dependencies/customer-risk-lookup",
+          "sourceType": "datahub_dependency",
+          "retrievedAt": "2026-07-20T12:00:00.000Z"
+        }
+      ],
+      "tags": ["dependency", "unknown"],
+      "constraints": [
+        "No compatible version record available for the current pipeline runtime."
+      ],
+      "blockedUses": [
+        "Do not use as implementation authority.",
+        "Do not use for deployment approval."
+      ]
+    }
+  ],
+  "allowedScope": [
+    "repos/fabricated-customer-platform/pipelines/customer_profile_pipeline.ts",
+    "repos/fabricated-customer-platform/tests/customer_profile_pipeline.test.ts",
+    "repos/fabricated-customer-platform/docs/customer-profile-mapping-notes.md"
+  ],
+  "blockedScope": [
+    "Any pull request creation, merge, or branch protection changes",
+    "Any deployment, runtime configuration, or secret updates",
+    "Any IAM, role, or authority-state mutation",
+    "Any dependency upgrade tied to customer-risk-lookup until unknown state is resolved"
+  ],
+  "requiredValidation": [
+    "Run pipeline unit tests for customer profile transformations",
+    "Run integration test fixture covering tier mapping before and after change",
+    "Collect human reviewer sign-off from data governance and service owner",
+    "Confirm unknown dependency status is resolved or explicitly deferred with approval"
+  ],
+  "unknowns": [
+    "Compatibility state for customer-risk-lookup dependency remains unknown",
+    "No approved authority record yet for dynamic reclassification proposal"
+  ],
+  "sourceReferences": [
+    {
+      "id": "urn:ctxops:architecture:customer-profile-pipeline:v3",
+      "title": "Customer Profile Pipeline Architecture v3",
+      "canonicalUrl": "https://catalog.example/architecture/customer-profile-pipeline-v3",
+      "sourceType": "datahub_document",
+      "retrievedAt": "2026-07-20T12:00:00.000Z"
+    },
+    {
+      "id": "urn:ctxops:proposal:profile-tier-logic:v1",
+      "title": "Proposal: Dynamic Profile Tier Reclassification",
+      "canonicalUrl": "https://catalog.example/proposals/profile-tier-logic-v1",
+      "sourceType": "datahub_proposal",
+      "retrievedAt": "2026-07-20T12:00:00.000Z"
+    },
+    {
+      "id": "urn:ctxops:incident:profile-tier-conflict:2026-06-14",
+      "title": "Quarantined: Profile Tier Mapping Conflict Incident",
+      "canonicalUrl": "https://catalog.example/incidents/profile-tier-conflict-2026-06-14",
+      "sourceType": "datahub_incident",
+      "retrievedAt": "2026-07-20T12:00:00.000Z"
+    },
+    {
+      "id": "urn:ctxops:dependency:customer-risk-lookup",
+      "title": "Customer Risk Lookup Dependency",
+      "canonicalUrl": "https://catalog.example/dependencies/customer-risk-lookup",
+      "sourceType": "datahub_dependency",
+      "retrievedAt": "2026-07-20T12:00:00.000Z"
+    }
+  ],
+  "humanApprovalRequired": true
+}
