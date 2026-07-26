@@ -41,7 +41,7 @@ test("removes duplicate provenance across records", () => {
   });
 
   assert.equal(packet.sourceReferences.length, 1, "duplicate provenance should be deduplicated");
-  assert.equal(packet.sourceReferences[0].canonicalUrl, commonProvenance.canonicalUrl);
+  assert.equal(packet.sourceReferences[0]?.canonicalUrl, commonProvenance.canonicalUrl);
 });
 
 test("reordered inputs produce identical work packets", () => {
