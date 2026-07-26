@@ -5,17 +5,15 @@ export interface DataHubClientOptions {
   baseUrl: string;
   token?: string;
   timeoutMs?: number;
-  endpoints?: {
+  endpoints: {
     /**
-     * Optional verified search path override.
-     * Defaults are isolated here because live DataHub deployments may differ.
+     * Verified search path for the target DataHub deployment.
      */
-    searchPath?: string;
+    searchPath: string;
     /**
-     * Optional verified entity path override.
-     * Defaults are isolated here because live DataHub deployments may differ.
+     * Verified entity path for the target DataHub deployment.
      */
-    entityPath?: string;
+    entityPath: string;
   };
 }
 
