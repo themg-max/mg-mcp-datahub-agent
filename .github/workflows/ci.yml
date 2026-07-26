@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - copilot/initial-implementation
+  pull_request:
+    branches:
+      - main
+      - copilot/initial-implementation
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Demo
+        run: npm run demo
+
+      - name: Validate demo JSON
+        run: npm run --silent demo > /tmp/mg-contextops-demo.json && node -e "JSON.parse(require('node:fs').readFileSync('/tmp/mg-contextops-demo.json', 'utf8'))"

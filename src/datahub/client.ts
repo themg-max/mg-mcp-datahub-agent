@@ -5,6 +5,18 @@ export interface DataHubClientOptions {
   baseUrl: string;
   token?: string;
   timeoutMs?: number;
+  endpoints?: {
+    /**
+     * Optional verified search path override.
+     * Defaults are isolated here because live DataHub deployments may differ.
+     */
+    searchPath?: string;
+    /**
+     * Optional verified entity path override.
+     * Defaults are isolated here because live DataHub deployments may differ.
+     */
+    entityPath?: string;
+  };
 }
 
 /**
@@ -15,16 +27,19 @@ export class DataHubClient {
   private readonly baseUrl: string;
   private readonly token: string | undefined;
   private readonly timeoutMs: number;
+  private readonly searchPath: string;
+  private readonly entityPath: string;
 
   public constructor(options: DataHubClientOptions) {
     if (!options || typeof options !== "object") {
       throw new Error("DataHubClient options are required.");
     }
 
-    const normalizedBaseUrl = this.normalizeBaseUrl(options.baseUrl);
-    this.baseUrl = normalizedBaseUrl;
+    this.baseUrl = this.normalizeBaseUrl(options.baseUrl);
     this.token = this.normalizeOptionalToken(options.token);
     this.timeoutMs = this.normalizeTimeout(options.timeoutMs);
+    this.searchPath = this.normalizeEndpointPath(options.endpoints?.searchPath, "/api/v1/search");
+    this.entityPath = this.normalizeEntityPath(options.endpoints?.entityPath, "/api/v1/entities/");
   }
 
   /**
@@ -32,7 +47,7 @@ export class DataHubClient {
    */
   public async search(query: string): Promise<unknown> {
     const safeQuery = this.validateNonEmptyInput(query, "query");
-    return this.request(`/api/v1/search?query=${encodeURIComponent(safeQuery)}`);
+    return this.request(`${this.searchPath}?query=${encodeURIComponent(safeQuery)}`);
   }
 
   /**
@@ -40,7 +55,7 @@ export class DataHubClient {
    */
   public async fetchByUrn(urn: string): Promise<unknown> {
     const safeUrn = this.validateNonEmptyInput(urn, "urn");
-    return this.request(`/api/v1/entities/${encodeURIComponent(safeUrn)}`);
+    return this.request(`${this.entityPath}${encodeURIComponent(safeUrn)}`);
   }
 
   private normalizeBaseUrl(baseUrl: string): string {
@@ -78,6 +93,33 @@ export class DataHubClient {
     }
 
     return Math.floor(timeoutMs);
+  }
+
+  private normalizeEndpointPath(path: string | undefined, fallback: string): string {
+    const candidate = this.normalizeOptionalPath(path) ?? fallback;
+    if (!candidate.startsWith("/")) {
+      throw new Error("DataHub endpoint paths must start with '/'.");
+    }
+
+    return candidate.replace(/\/+$/, "");
+  }
+
+  private normalizeEntityPath(path: string | undefined, fallback: string): string {
+    const candidate = this.normalizeOptionalPath(path) ?? fallback;
+    if (!candidate.startsWith("/")) {
+      throw new Error("DataHub entity path must start with '/'.");
+    }
+
+    return candidate.endsWith("/") ? candidate : `${candidate}/`;
+  }
+
+  private normalizeOptionalPath(path: string | undefined): string | undefined {
+    if (typeof path !== "string") {
+      return undefined;
+    }
+
+    const trimmedPath = path.trim();
+    return trimmedPath.length > 0 ? trimmedPath : undefined;
   }
 
   private validateNonEmptyInput(value: string, fieldName: string): string {

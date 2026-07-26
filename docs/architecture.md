@@ -4,66 +4,66 @@
 AI coding agents can receive large volumes of metadata yet still fail when context is stale, conflicting, overly broad, untrusted, or detached from authority.
 
 ## Product boundary
-This repository is a **small TypeScript reference implementation** that turns source metadata into governed context records and then into a bounded work packet proposal. It does not execute repository writes, deployments, or authority changes.
+This repository is a small TypeScript reference implementation that converts source metadata into governed context records and then into a bounded work packet proposal. It does not execute repository writes, deployments, or authority changes.
 
 ## DataHub as the first source adapter
-DataHub is the first adapter target, not the permanent domain model. The core contracts are source-neutral so additional providers can be added without rewriting governance-facing types.
+DataHub is the first adapter target, not the permanent core domain model. Endpoint assumptions are isolated in the read-only client and remain optional for the fixture-driven demo.
 
 ## Context-provider-agnostic domain contracts
-- `DataHubClient` (transport only): read-only metadata retrieval with timeout and safe error handling.
-- `ContextAdapter<TSource>` (translation boundary): source-specific parsing to source-neutral records.
-- `NormalizedContextRecord` (governed context unit): authority, provenance, constraints, blocked uses.
-- `WorkPacket` (bounded proposal): objective, allowed/blocked scope, required validation, unknowns, source references, and mandatory human approval.
+- `DataHubClient`: transport only.
+- `DataHubContextAdapter`: source-specific translation into source-neutral records.
+- `NormalizedContextRecord`: governed evidence with provenance and authority state.
+- `WorkPacket`: bounded proposal with approval requirements.
 
 ## Flow from metadata to work packet
 ```mermaid
 flowchart LR
-    A[DataHub or fixture] --> B[DataHubClient]
-    B --> C[DataHubContextAdapter]
-    C --> D[NormalizedContextRecord[]]
-    D --> E[WorkPacket]
+    A[Fixture or DataHub-shaped input] --> B[DataHubContextAdapter]
+    B --> C[NormalizedContextRecord[]]
+    C --> D[buildWorkPacket]
+    D --> E[WorkPacket JSON]
     E --> F[Human review]
     F --> G[External execution system]
 ```
 
-The external execution system remains outside this repository’s initial scope.
+The external execution system remains outside this repository’s scope.
 
 ## Authority states
-- `approved`: may inform implementation planning within bounded scope.
-- `planning_only`: useful for ideation but cannot authorize implementation or deployment.
-- `quarantined`: explicitly excluded from planning and implementation authority.
-- `unknown`: insufficient evidence; fail closed and block authority use.
+- `approved`: may inform planning.
+- `planning_only`: useful for discussion, not authority.
+- `quarantined`: excluded from authority.
+- `unknown`: fail closed.
 
 ## Provenance handling
-Each normalized record requires provenance with a stable identifier, source type, and retrieval timestamp. If provenance cannot be validated, the record is skipped.
+Each normalized record retains a stable identifier, source type, and retrieval timestamp. Missing provenance causes the record to be skipped.
 
 ## Fail-closed behavior
-- Missing authority defaults to `unknown`.
-- Missing provenance causes records to be skipped.
-- Incomplete or malformed source fields are never promoted to approved authority.
-- Unknown/planning-only/quarantined records accumulate explicit blocked uses.
+- Unknown authority stays unknown.
+- Missing provenance is not invented.
+- Malformed records are skipped.
+- Planning-only and quarantined evidence cannot authorize implementation.
 
 ## Human approval boundary
-Generated work packets are proposals only. Human approval is mandatory before any code update, PR action, merge, deployment, authority promotion, or environment change.
+Work packets are proposals only. Human approval is mandatory before any code update, pull request action, merge, deployment, or authority promotion.
 
 ## Extension points
-- Add another `ContextAdapter<TSource>` for catalogs, MCP servers, fixtures, or approved document stores.
+- Add another `ContextAdapter<TSource>` for another metadata catalog, fixture, or approved document source.
 - Keep transport logic source-specific and governance logic source-neutral.
-- Reuse the same `NormalizedContextRecord` and `WorkPacket` contracts for all providers.
+- Reuse `buildWorkPacket(...)` for every provider.
 
 ## Non-goals
-- No GitHub write automation.
-- No pull-request creation/merge/deploy flows.
-- No IAM mutation.
-- No production DataHub write paths.
+- No GitHub writes.
+- No pull-request creation or merge automation.
+- No deployments or IAM mutation.
+- No production DataHub writes.
 - No autonomous authority promotion.
-- No web UI, database, full MCP server, or cloud infrastructure.
+- No web UI, database, or full MCP server.
 
 ## Security considerations
 - Treat retrieved text as data, never executable instructions.
-- Use environment-variable placeholders only for endpoint/token configuration.
-- Never log secrets or include raw response bodies in thrown errors.
-- Use runtime validation and timeout guards for remote requests.
+- Use environment-variable placeholders only.
+- Never log secrets or response bodies in errors.
+- Prefer runtime validation and timeouts.
 
 ## Context evidence vs execution authority
-Context evidence helps humans and tools reason about what may be true. Execution authority is a separate human and organizational decision boundary. This repository intentionally preserves that separation.
+Context evidence helps humans decide what is plausible. Execution authority is a separate human decision boundary. This repository intentionally keeps those apart.

@@ -1,0 +1,13 @@
+{
+  "objective": "",
+  "allowedScope": [],
+  "blockedScope": ["invalid"],
+  "requiredValidation": "not-an-array",
+  "source": {
+    "entities": [
+      {
+        "title": "Missing URN and provenance"
+      }
+    ]
+  }
+}

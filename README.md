@@ -1,100 +1,111 @@
 # MG ContextOps DataHub Agent
 
-A TypeScript reference implementation that converts metadata into governed context and then into bounded, human-reviewable developer work packets.
+A public TypeScript reference implementation that turns synthetic DataHub metadata into governed context and a bounded, human-reviewable work packet.
 
 ## Problem
-AI agents can fail even with abundant metadata when context is stale, conflicting, untrusted, too broad, or detached from decision authority.
+AI agents can fail when context is stale, conflicting, untrusted, too broad, or detached from decision authority.
 
 ## What this project does
-This repository demonstrates a safer flow:
+- Loads fixture data by default.
+- Normalizes DataHub-shaped metadata into source-neutral context records.
+- Builds a deterministic work packet with allowed scope, blocked scope, validation, and unknowns.
+- Prints valid JSON for human review.
 
-DataHub metadata → DataHub client → context adapter → normalized context records → authority/provenance evaluation → bounded work packet proposal → human review.
-
-Generated packets are proposals only and are never automatic approval or deployment authority.
+Generated packets are proposals only. They are never approval, deployment authority, or a write-back mechanism.
 
 ## Why governed context matters
-- Prevents accidental use of planning-only or conflicting metadata as implementation authority.
-- Preserves provenance and unknowns instead of inventing certainty.
-- Keeps scope bounded and reviewable before any engineering action.
+- Planning-only evidence should not authorize implementation.
+- Quarantined evidence should stay out of authority decisions.
+- Unknown dependencies should fail closed instead of being guessed.
 
 ## Architecture overview
-- `DataHubClient`: read-only transport for metadata retrieval.
-- `ContextAdapter<TSource>`: provider-specific translation boundary.
-- `NormalizedContextRecord`: source-neutral governed context contract.
-- `WorkPacket`: bounded proposal contract with mandatory human approval.
+- `DataHubClient`: read-only transport for optional metadata retrieval.
+- `DataHubContextAdapter`: defensive normalization for synthetic or future provider input.
+- `NormalizedContextRecord`: source-neutral governed context.
+- `WorkPacket`: bounded proposal with mandatory human approval.
+- `buildWorkPacket(...)`: deterministic packet builder for review output.
 
-See `docs/architecture.md` for full design details.
+See `docs/architecture.md` for the full boundary model.
 
 ## Quickstart
 ### Supported platform
 - Node.js 20+
 
-### Install and validate
+### Install
 ```bash
-npm install
+npm ci
+```
+
+### Run the deterministic demo
+```bash
+npm run demo
+```
+
+### Validate
+```bash
 npm run typecheck
+npm test
 npm run build
 ```
 
-### Deterministic synthetic demo
-Follow `docs/demo.md` for a 2-3 minute walkthrough with no private credentials.
+## One-command demo
+`npm run demo` builds the project, reads the committed fixture, and prints JSON to stdout.
 
 ## Repository structure
 ```text
 src/
+  cli.ts
+  work-packet.ts
   datahub/
     client.ts
     context-adapter.ts
-examples/
-  generated-work-packet/
-    work-packet.json
-  sample-pr/
-    README.md
-docs/
-  architecture.md
-  demo.md
+fixtures/
+  datahub-context.json
+  invalid-datahub-context.json
+tests/
+  context-adapter.test.ts
+  datahub-client.test.ts
+  work-packet.test.ts
 ```
 
 ## Example work packet
-A deterministic synthetic packet is committed at:
-- `examples/generated-work-packet/work-packet.json`
+A deterministic example is committed at `fixtures/datahub-context.json`.
 
 ## Trust and authority model
 - Authority states: `approved`, `planning_only`, `quarantined`, `unknown`.
-- Missing or malformed provenance fails closed.
-- Unknown/planning-only/quarantined context receives blocked uses.
-- `humanApprovalRequired` is always `true` for proposals.
+- Missing provenance fails closed.
+- `humanApprovalRequired` is always `true`.
+- Unknown, planning-only, and quarantined context is never treated as execution authority.
 
 ## Security and privacy boundaries
-- Read-only toward DataHub metadata retrieval.
-- Treats retrieved content as data, not executable instructions.
-- Uses environment placeholders only (`.env.example`).
-- No token logging; no response body leakage in error surfaces.
-- No autonomous repository writes, merges, deployments, or authority promotion.
+- No production DataHub credentials are required.
+- No autonomous GitHub writes, merges, deployments, or IAM changes exist.
+- Environment variables are placeholders only.
+- Errors avoid leaking response bodies or secrets.
+- Default demo mode is fixture-based.
 
 ## Extension guide for other context providers
-To support another provider:
-1. Add a provider-specific client (optional if source is local/static).
-2. Implement `ContextAdapter<TSource>` for that source format.
-3. Emit `NormalizedContextRecord[]` and `WorkPacket` using existing source-neutral contracts.
+1. Add a provider-specific adapter that emits `NormalizedContextRecord[]`.
+2. Keep transport separate from governance decisions.
+3. Reuse `buildWorkPacket(...)` for bounded review output.
 
 ## Current limitations
-- No live production DataHub integration in default demo mode.
-- No PR/merge/deploy automation.
-- No database, web UI, full MCP server, or infrastructure provisioning.
+- The default demo uses synthetic fixture data only.
+- Live DataHub endpoints are intentionally unverified and optional.
+- No PR creation, merge, deployment, database, web UI, or MCP server is included.
 
 ## Competition reuse model
-This public repository is designed as a reusable starter for Devpost-style competitions and other governed-context experiments. Replace adapters and examples while keeping source-neutral contracts.
+This repository is designed as a reusable starter for future Devpost-style competitions and other governed-context demos.
 
 ## Competition Evidence
-- Competition name: `<fill>`
-- Competition period: `<fill>`
-- Baseline before competition: `<fill>`
-- New work completed during competition: `<fill>`
-- AI tools used: `<fill>`
-- Human decisions: `<fill>`
-- Validation: `<fill>`
-- Commits or pull requests: `<fill>`
+- Competition name: Draft PR #1, `mg-mcp-datahub-agent`
+- Competition period: `2026-07-26`
+- Baseline before competition: scaffold with docs and a minimal adapter/client skeleton
+- New work completed during competition: added fixture-driven CLI, deterministic packet builder, tests, and CI
+- AI tools used: Copilot coding agent
+- Human decisions: approved the public reference scope, fixture-only demo, and no-write boundary
+- Validation: `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, `npm run demo`, JSON validation, secret scan
+- Commits or pull requests: Draft PR #1 on `copilot/initial-implementation`
 - Demo link: `<fill>`
 - Session or feedback ID (if required): `<fill>`
 
