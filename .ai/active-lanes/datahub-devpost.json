@@ -7,8 +7,7 @@
     "APPROVED",
     "VERIFIED",
     "SUPERSEDED",
-    "UNKNOWN",
-    "PRESERVED"
+    "UNKNOWN"
   ],
   "lanes": [
     {
@@ -29,7 +28,8 @@
     },
     {
       "id": "fixture-demo-preservation",
-      "status": "PRESERVED",
+      "status": "VERIFIED",
+      "disposition": "PRESERVED",
       "branch": "feat/datahub-fixture-demo-slice",
       "commit": "86b1cb01e23474308455179c0c3c91e4de7f8ea8"
     },

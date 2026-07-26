@@ -21,9 +21,13 @@ request merges.
 - **mutation**: validates a registered approved lane and task-scoped worktree; forbidden
   on main and does not itself mutate anything.
 - **merge**: validates only; requires REMOTE_VERIFIED identity and current GitHub merge
-  evidence. Gatekeeper never merges or authorizes a merge.
+  evidence: `GATEKEEPER_PR_NUMBER`, `GATEKEEPER_EXPECTED_HEAD`,
+  `GATEKEEPER_CURRENT_HEAD`, `GATEKEEPER_CHECKS_STATUS`,
+  `GATEKEEPER_REVIEW_THREADS`, `GATEKEEPER_DISPOSITION`, and
+  `GATEKEEPER_HUMAN_AUTHORIZED`. Gatekeeper never merges or authorizes a merge.
 - **cleanup**: validates only; requires REMOTE_VERIFIED identity and verified merged-PR
-  evidence before any separate cleanup action.
+  evidence: `GATEKEEPER_PR_STATE` and `GATEKEEPER_MERGE_COMMIT`. It never deletes
+  anything; cleanup remains a separate human-authorized action.
 
 Human authorization is REQUIRED for every merge. One task owner is REQUIRED. Before
 mutation, record the owner, objective, allowed scope, blocked scope, validation, proof,
@@ -49,4 +53,3 @@ definition of done, and stop condition.
 
 Gatekeeper must keep MG MCP read-only. It prohibits deployment, IAM or secret changes,
 protected-data mutation, direct DataHub writes, force pushes, and local mutation on main.
-

@@ -10,7 +10,14 @@ git -C "$ROOT" branch --show-current
 git -C "$ROOT" status --short --untracked-files=all
 git -C "$ROOT" worktree list --porcelain
 "$ROOT/scripts/check_lane_state.sh" inspect
-"$ROOT/scripts/check_lane_state.sh" mutation
+BRANCH="$(git -C "$ROOT" branch --show-current)"
+if [ -z "$BRANCH" ]; then
+  printf '%s\n' 'mutation validation skipped: detached HEAD is inspection-only'
+elif [ "$BRANCH" = "main" ]; then
+  printf '%s\n' 'mutation validation skipped: main is inspection-only'
+else
+  "$ROOT/scripts/check_lane_state.sh" mutation
+fi
 ```
 
 The checker dynamically finds the root. If `origin` exists, it must normalize to
@@ -22,4 +29,3 @@ paths, blocked paths, validation, proof, definition of done, and stop condition.
 the complete worktree status and reject unrelated changes. Fail closed on missing or
 conflicting identity, detached or main mutation branches, unknown lanes, scope drift, or
 missing controls. Never substitute policy or a lane from another repository.
-
