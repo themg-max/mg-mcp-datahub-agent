@@ -16,16 +16,43 @@ export interface WorkPacketBuilderInput {
  * Builds a bounded work packet while preserving source context.
  */
 export function buildWorkPacket(input: WorkPacketBuilderInput): WorkPacket {
-  const currentContext = [...input.currentContext];
+  // Create canonicalized copy of currentContext: deduplicate/sort provenance and sort records by id.
+  const canonicalizeProvenance = (provenance: SourceReference[] = []): SourceReference[] => {
+    const map = new Map<string, SourceReference>();
+    for (const p of provenance) {
+      const key = p.canonicalUrl ?? `${p.sourceType}|${p.id}|${p.retrievedAt}`;
+      if (!map.has(key)) {
+        map.set(key, p);
+      }
+    }
+
+    const values = Array.from(map.values());
+    values.sort((a, b) => {
+      const ak = a.canonicalUrl ?? `${a.sourceType}|${a.id}|${a.retrievedAt}`;
+      const bk = b.canonicalUrl ?? `${b.sourceType}|${b.id}|${b.retrievedAt}`;
+      return ak.localeCompare(bk);
+    });
+
+    return values;
+  };
+
+  const currentContext = input.currentContext
+    .map((r) => ({ ...r, provenance: canonicalizeProvenance(r.provenance) }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
   const sourceReferences = collectSourceReferences(currentContext);
-  const blockedScope = [...new Set([...(input.blockedScope ?? []), ...deriveBlockedScope(currentContext)])];
-  const requiredValidation = [...new Set([...(input.requiredValidation ?? []), ...deriveRequiredValidation(currentContext)])];
-  const unknowns = [...new Set([...(input.unknowns ?? []), ...deriveUnknowns(currentContext)])];
+
+  const normalizeStringArray = (arr: string[] = []) => Array.from(new Set(arr.map((s) => s))).sort();
+
+  const blockedScope = normalizeStringArray([...(input.blockedScope ?? []), ...deriveBlockedScope(currentContext)]);
+  const requiredValidation = normalizeStringArray([...(input.requiredValidation ?? []), ...deriveRequiredValidation(currentContext)]);
+  const unknowns = normalizeStringArray([...(input.unknowns ?? []), ...deriveUnknowns(currentContext)]);
+  const allowedScope = normalizeStringArray(input.allowedScope ?? []);
 
   return {
     objective: input.objective,
     currentContext,
-    allowedScope: [...input.allowedScope],
+    allowedScope,
     blockedScope,
     requiredValidation,
     unknowns,
@@ -35,13 +62,24 @@ export function buildWorkPacket(input: WorkPacketBuilderInput): WorkPacket {
 }
 
 function collectSourceReferences(records: NormalizedContextRecord[]): SourceReference[] {
-  const references: SourceReference[] = [];
+  const map = new Map<string, SourceReference>();
   for (const record of records) {
     for (const reference of record.provenance) {
-      references.push(reference);
+      const key = reference.canonicalUrl ?? `${reference.sourceType}|${reference.id}|${reference.retrievedAt}`;
+      if (!map.has(key)) {
+        map.set(key, reference);
+      }
     }
   }
-  return references;
+
+  const refs = Array.from(map.values());
+  refs.sort((a, b) => {
+    const ak = a.canonicalUrl ?? `${a.sourceType}|${a.id}|${a.retrievedAt}`;
+    const bk = b.canonicalUrl ?? `${b.sourceType}|${b.id}|${b.retrievedAt}`;
+    return ak.localeCompare(bk);
+  });
+
+  return refs;
 }
 
 function deriveBlockedScope(records: NormalizedContextRecord[]): string[] {

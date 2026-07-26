@@ -94,20 +94,34 @@ A deterministic example is committed at `fixtures/datahub-context.json`.
 - Live DataHub endpoints are intentionally unverified and optional.
 - No PR creation, merge, deployment, database, web UI, or MCP server is included.
 
-## Competition reuse model
-This repository is designed as a reusable starter for future Devpost-style competitions and other governed-context demos.
+## How this advances MG MCP
+This repository is a focused, public proof-of-concept adapter that demonstrates how provider-shaped metadata (DataHub-shaped records) can be translated into the MG MCP `NormalizedContextRecord[]` model and a deterministic `WorkPacket` suitable for human review.
+
+## What existed before the competition
+- The MG MCP governance architecture (lane/worktree discipline, authority model, review handoffs) existed prior to this public adapter. That baseline provides the policy and operational context this adapter targets.
+
+## What was built during the competition
+- A public TypeScript reference implementation that:
+  - Normalizes DataHub-shaped metadata into source-neutral context records.
+  - Produces deterministic, canonicalized work packets with provenance and sorted, deduplicated arrays for stable output.
+  - Adds tests that prove reordered inputs and duplicate provenance are handled deterministically.
+  - Adds fixture-driven demo and CI workflow suitable for public review.
+
+## What remains private
+- Production MG MCP servers, private configuration, and any internal integration code remain in private repositories and are not part of this public adapter.
+- No private data, credentials, or operational secrets are included in this repository.
+
+## Next phase: official DataHub MCP integration
+The next phase is an integration with an official DataHub MCP Server (or certified MG MCP server) in a separate, authorized workstream. That integration will be done in a repository with the appropriate access controls, credentials, and operational governance.
 
 ## Competition Evidence
-- Competition name: Draft PR #1, `mg-mcp-datahub-agent`
-- Competition period: `2026-07-26`
-- Baseline before competition: scaffold with docs and a minimal adapter/client skeleton
-- New work completed during competition: added fixture-driven CLI, deterministic packet builder, tests, and CI
-- AI tools used: Copilot coding agent
-- Human decisions: approved the public reference scope, fixture-only demo, and no-write boundary
-- Validation: `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, `npm run demo`, JSON validation, secret scan
-- Commits or pull requests: Draft PR #1 on `copilot/initial-implementation`
+- Competition: Build with DataHub: The Agent Hackathon
+- Baseline (pre-existing): MG MCP governance and architecture existed prior to this public adapter
+- New public work: This TypeScript DataHub adapter and deterministic work-packet generator
+- AI contribution: Copilot coding agent assisted in edits; human reviewers scoped, approved, and validated the public reference implementation and the no-write, fixture-first demo boundary
+- Validation carried out: `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, `npm run demo:json` (JSON parse validation), security scan
+- Pull request: Draft PR #1 on branch `copilot/initial-implementation`
 - Demo link: `<fill>`
-- Session or feedback ID (if required): `<fill>`
 
 ## License
 Apache-2.0 (`LICENSE`)

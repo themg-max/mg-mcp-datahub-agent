@@ -1,13 +1,11 @@
-name: ci
+name: CI
 
 on:
-  push:
-    branches:
-      - copilot/initial-implementation
   pull_request:
-    branches:
-      - main
-      - copilot/initial-implementation
+    branches: [ main ]
+  push:
+    # Run CI for pushes to non-main branches
+    branches-ignore: [ main ]
 
 permissions:
   contents: read
@@ -37,8 +35,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Demo
-        run: npm run demo
+      - name: Demo JSON
+        run: npm run demo:json
 
       - name: Validate demo JSON
-        run: npm run --silent demo > /tmp/mg-contextops-demo.json && node -e "JSON.parse(require('node:fs').readFileSync('/tmp/mg-contextops-demo.json', 'utf8'))"
+        run: npm run --silent demo:json > /tmp/mg-contextops-demo.json && node -e "JSON.parse(require('node:fs').readFileSync('/tmp/mg-contextops-demo.json', 'utf8'))"

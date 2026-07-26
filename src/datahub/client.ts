@@ -38,8 +38,15 @@ export class DataHubClient {
     this.baseUrl = this.normalizeBaseUrl(options.baseUrl);
     this.token = this.normalizeOptionalToken(options.token);
     this.timeoutMs = this.normalizeTimeout(options.timeoutMs);
-    this.searchPath = this.normalizeEndpointPath(options.endpoints?.searchPath, "/api/v1/search");
-    this.entityPath = this.normalizeEntityPath(options.endpoints?.entityPath, "/api/v1/entities/");
+
+    // Endpoints must be provided explicitly. Do not assume default REST paths for DataHub deployments.
+    const endpoints = options.endpoints;
+    if (!endpoints || typeof endpoints !== "object") {
+      throw new Error("DataHub endpoints must be explicitly provided in options.endpoints; default REST paths are not assumed.");
+    }
+
+    this.searchPath = this.normalizeEndpointPath(endpoints.searchPath);
+    this.entityPath = this.normalizeEntityPath(endpoints.entityPath);
   }
 
   /**
@@ -95,8 +102,12 @@ export class DataHubClient {
     return Math.floor(timeoutMs);
   }
 
-  private normalizeEndpointPath(path: string | undefined, fallback: string): string {
-    const candidate = this.normalizeOptionalPath(path) ?? fallback;
+  private normalizeEndpointPath(path: string | undefined): string {
+    const candidate = this.normalizeOptionalPath(path);
+    if (!candidate) {
+      throw new Error("DataHub endpoint path is required; do not rely on implicit defaults.");
+    }
+
     if (!candidate.startsWith("/")) {
       throw new Error("DataHub endpoint paths must start with '/'.");
     }
@@ -104,8 +115,12 @@ export class DataHubClient {
     return candidate.replace(/\/+$/, "");
   }
 
-  private normalizeEntityPath(path: string | undefined, fallback: string): string {
-    const candidate = this.normalizeOptionalPath(path) ?? fallback;
+  private normalizeEntityPath(path: string | undefined): string {
+    const candidate = this.normalizeOptionalPath(path);
+    if (!candidate) {
+      throw new Error("DataHub entity path is required; do not rely on implicit defaults.");
+    }
+
     if (!candidate.startsWith("/")) {
       throw new Error("DataHub entity path must start with '/'.");
     }
