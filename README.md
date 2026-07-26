@@ -53,19 +53,36 @@ npm run build
 
 ## Repository structure
 ```text
+README.md
+LICENSE
+.env.example
+package.json
+package-lock.json
+tsconfig.json
+.github/workflows/ci.yml
+docs/
+  architecture.md
+  demo.md
+  mg-mcp-alignment.md
+examples/
+  generated-work-packet/
+    work-packet.json
+  sample-pr/
+    README.md
+fixtures/
+  datahub-context.json
+  invalid-datahub-context.json
 src/
   cli.ts
   work-packet.ts
   datahub/
     client.ts
     context-adapter.ts
-fixtures/
-  datahub-context.json
-  invalid-datahub-context.json
 tests/
   context-adapter.test.ts
   datahub-client.test.ts
   work-packet.test.ts
+  work-packet.dedup.test.ts
 ```
 
 ## Example work packet
@@ -79,6 +96,7 @@ A deterministic example is committed at `fixtures/datahub-context.json`.
 
 ## Security and privacy boundaries
 - No production DataHub credentials are required.
+- Private configuration stays external to this repository.
 - No autonomous GitHub writes, merges, deployments, or IAM changes exist.
 - Environment variables are placeholders only.
 - Errors avoid leaking response bodies or secrets.
@@ -90,12 +108,12 @@ A deterministic example is committed at `fixtures/datahub-context.json`.
 3. Reuse `buildWorkPacket(...)` for bounded review output.
 
 ## Current limitations
-- The default demo uses synthetic fixture data only.
+- This phase is fixture-only.
 - Live DataHub endpoints are intentionally unverified and optional.
 - No PR creation, merge, deployment, database, web UI, or MCP server is included.
 
 ## How this advances MG MCP
-This repository is a focused, public proof-of-concept adapter that demonstrates how provider-shaped metadata (DataHub-shaped records) can be translated into the MG MCP `NormalizedContextRecord[]` model and a deterministic `WorkPacket` suitable for human review.
+This repository is a focused, public proof-of-concept adapter that demonstrates how provider-shaped metadata (DataHub-shaped records) can be translated into a public model inspired by MG MCP: `NormalizedContextRecord[]` and a deterministic `WorkPacket` suitable for human review.
 
 ## What existed before the competition
 - The MG MCP governance architecture (lane/worktree discipline, authority model, review handoffs) existed prior to this public adapter. That baseline provides the policy and operational context this adapter targets.
@@ -112,7 +130,7 @@ This repository is a focused, public proof-of-concept adapter that demonstrates 
 - No private data, credentials, or operational secrets are included in this repository.
 
 ## Next phase: official DataHub MCP integration
-The next phase is an integration with an official DataHub MCP Server (or certified MG MCP server) in a separate, authorized workstream. That integration will be done in a repository with the appropriate access controls, credentials, and operational governance.
+The next phase is official DataHub MCP integration in PR #2 of this public repository. That work will happen in a separate, authorized workstream with the appropriate access controls, credentials, and operational governance.
 
 ## Competition Evidence
 - Competition: Build with DataHub: The Agent Hackathon
@@ -121,7 +139,7 @@ The next phase is an integration with an official DataHub MCP Server (or certifi
 - AI contribution: Copilot coding agent assisted in edits; human reviewers scoped, approved, and validated the public reference implementation and the no-write, fixture-first demo boundary
 - Validation carried out: `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, `npm run demo:json` (JSON parse validation), security scan
 - Pull request: Draft PR #1 on branch `copilot/initial-implementation`
-- Demo link: `<fill>`
+- Demo video: Not yet recorded
 
 ## License
 Apache-2.0 (`LICENSE`)

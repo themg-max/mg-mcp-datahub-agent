@@ -1,18 +1,18 @@
 MG MCP Alignment and Public Adapter Notes
 
-This document explains how this public repository relates to the pre-existing MG MCP (Managed Governance — Multi-Context Platform) architecture, what was contributed in this public implementation, and what remains private or out-of-scope.
+This document explains how this public repository relates to the pre-existing MG MCP architecture, what was contributed in this public implementation, and what remains private or out-of-scope.
 
 1. MG MCP as Pre-existing Governed Context Architecture
 
 - MG MCP is an existing governance and context architecture used internally to provide authoritative, governed context for agent workflows.
 - It provides lane/worktree discipline, authority classifications, handoffs, and the policy model that determines when evidence may be used to grant implementation or deployment authority.
-- This repository does not re-implement MG MCP. Instead it provides a narrow, public-facing adapter that demonstrates how DataHub-shaped metadata can be translated into the MG MCP `NormalizedContextRecord[]` shape and a bounded `WorkPacket` for human review.
+- This repository does not re-implement MG MCP. Instead it provides a narrow, public-facing adapter that demonstrates how DataHub-shaped metadata can be translated into a public model inspired by MG MCP: `NormalizedContextRecord[]` and a bounded `WorkPacket` for human review.
 
 2. Purpose of this Repository (Public DataHub Adapter / Proof)
 
 - This project is a public TypeScript reference implementation that:
   - Accepts synthetic or DataHub-shaped metadata.
-  - Produces deterministic, reviewable work packets that conform to the MG MCP governance model (authority states, provenance, blocked uses, required validation).
+  - Produces deterministic, reviewable work packets that follow the public model inspired by MG MCP (authority states, provenance, blocked uses, required validation).
   - Preserves provenance so human reviewers can trace decisions back to evidence sources.
 - The repository is intentionally small and fixture-driven to facilitate public review and reuse during competitions and demos.
 
@@ -36,7 +36,7 @@ This document explains how this public repository relates to the pre-existing MG
 
 6. Next Phase: Official DataHub MCP Server Integration
 
-- The next phase will integrate this adapter with an official DataHub MCP Server (or a certified MG MCP server) in a separate, authorized repository and workstream.
+- The next phase will integrate this adapter with an official DataHub MCP Server in PR #2 of this public repository and in the separate, authorized workstream that owns the live integration.
 - That integration will include:
   - Proper server endpoints and transport configuration managed by the owning team.
   - Deployment and IAM changes performed under the appropriate governance and approval process.

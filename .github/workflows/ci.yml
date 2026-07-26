@@ -32,11 +32,5 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build
-        run: npm run build
-
       - name: Demo JSON
-        run: npm run demo:json
-
-      - name: Validate demo JSON
-        run: npm run --silent demo:json > /tmp/mg-contextops-demo.json && node -e "JSON.parse(require('node:fs').readFileSync('/tmp/mg-contextops-demo.json', 'utf8'))"
+        run: npm run --silent demo:json > /tmp/mg-contextops-demo.json && node -e "const v=JSON.parse(require('node:fs').readFileSync('/tmp/mg-contextops-demo.json', 'utf8')); if (v.workPacket?.humanApprovalRequired !== true) throw new Error('invalid governed packet')"

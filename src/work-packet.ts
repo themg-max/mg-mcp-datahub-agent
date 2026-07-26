@@ -16,33 +16,9 @@ export interface WorkPacketBuilderInput {
  * Builds a bounded work packet while preserving source context.
  */
 export function buildWorkPacket(input: WorkPacketBuilderInput): WorkPacket {
-  // Create canonicalized copy of currentContext: deduplicate/sort provenance and sort records by id.
-  const canonicalizeProvenance = (provenance: SourceReference[] = []): SourceReference[] => {
-    const map = new Map<string, SourceReference>();
-    for (const p of provenance) {
-      const key = p.canonicalUrl ?? `${p.sourceType}|${p.id}|${p.retrievedAt}`;
-      if (!map.has(key)) {
-        map.set(key, p);
-      }
-    }
-
-    const values = Array.from(map.values());
-    values.sort((a, b) => {
-      const ak = a.canonicalUrl ?? `${a.sourceType}|${a.id}|${a.retrievedAt}`;
-      const bk = b.canonicalUrl ?? `${b.sourceType}|${b.id}|${b.retrievedAt}`;
-      return ak.localeCompare(bk);
-    });
-
-    return values;
-  };
-
-  const currentContext = input.currentContext
-    .map((r) => ({ ...r, provenance: canonicalizeProvenance(r.provenance) }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+  const currentContext = canonicalizeContextRecords(input.currentContext);
 
   const sourceReferences = collectSourceReferences(currentContext);
-
-  const normalizeStringArray = (arr: string[] = []) => Array.from(new Set(arr.map((s) => s))).sort();
 
   const blockedScope = normalizeStringArray([...(input.blockedScope ?? []), ...deriveBlockedScope(currentContext)]);
   const requiredValidation = normalizeStringArray([...(input.requiredValidation ?? []), ...deriveRequiredValidation(currentContext)]);
@@ -61,11 +37,40 @@ export function buildWorkPacket(input: WorkPacketBuilderInput): WorkPacket {
   };
 }
 
+function canonicalizeContextRecords(records: NormalizedContextRecord[]): NormalizedContextRecord[] {
+  const seenIds = new Set<string>();
+  const normalized = records.map((record) => {
+    if (seenIds.has(record.id)) {
+      throw new Error(`Duplicate NormalizedContextRecord id: ${record.id}`);
+    }
+
+    seenIds.add(record.id);
+    return { ...record, provenance: canonicalizeProvenance(record.provenance) };
+  });
+
+  normalized.sort((a, b) => a.id.localeCompare(b.id));
+  return normalized;
+}
+
+function canonicalizeProvenance(provenance: SourceReference[] = []): SourceReference[] {
+  const map = new Map<string, SourceReference>();
+  for (const reference of provenance) {
+    const key = referenceKey(reference);
+    if (!map.has(key)) {
+      map.set(key, reference);
+    }
+  }
+
+  const values = Array.from(map.values());
+  values.sort((a, b) => referenceKey(a).localeCompare(referenceKey(b)));
+  return values;
+}
+
 function collectSourceReferences(records: NormalizedContextRecord[]): SourceReference[] {
   const map = new Map<string, SourceReference>();
   for (const record of records) {
     for (const reference of record.provenance) {
-      const key = reference.canonicalUrl ?? `${reference.sourceType}|${reference.id}|${reference.retrievedAt}`;
+      const key = referenceKey(reference);
       if (!map.has(key)) {
         map.set(key, reference);
       }
@@ -74,12 +79,26 @@ function collectSourceReferences(records: NormalizedContextRecord[]): SourceRefe
 
   const refs = Array.from(map.values());
   refs.sort((a, b) => {
-    const ak = a.canonicalUrl ?? `${a.sourceType}|${a.id}|${a.retrievedAt}`;
-    const bk = b.canonicalUrl ?? `${b.sourceType}|${b.id}|${b.retrievedAt}`;
-    return ak.localeCompare(bk);
+    return referenceKey(a).localeCompare(referenceKey(b));
   });
 
   return refs;
+}
+
+function referenceKey(reference: SourceReference): string {
+  return `${reference.sourceType}|${reference.id}|${reference.canonicalUrl ?? ""}|${reference.retrievedAt}`;
+}
+
+function normalizeStringArray(values: string[] = []): string[] {
+  const normalized = new Set<string>();
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      normalized.add(trimmed);
+    }
+  }
+
+  return Array.from(normalized).sort((a, b) => a.localeCompare(b));
 }
 
 function deriveBlockedScope(records: NormalizedContextRecord[]): string[] {
