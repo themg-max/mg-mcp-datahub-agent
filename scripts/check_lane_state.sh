@@ -5,6 +5,7 @@ expected_slug="themg-max/mg-mcp-datahub-agent"
 expected_commit="1e5e7a19bfff280d351373ae43c41cefeaab56f9"
 expected_package="@themg/contextops-datahub-agent"
 architecture_artifact="docs/datahub-skill-execution-architecture.md"
+registry_path=".ai/active-lanes/datahub-devpost.json"
 
 case "$mode" in
   inspect|mutation|merge|cleanup) ;;
@@ -15,7 +16,7 @@ root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   printf '%s\n' 'ERROR not inside a Git repository' >&2
   exit 10
 }
-registry="$root/.ai/active-lanes/datahub-devpost.json"
+proposal_registry="$root/$registry_path"
 
 normalize_remote() {
   value="$1"
@@ -56,45 +57,184 @@ else
 fi
 
 branch="$(git -C "$root" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+authority_source="UNRESOLVED"
+authority_ref="NONE"
+authority_commit="NONE"
+authority_error=""
+authority_registry=""
+
+cleanup_authority_registry() {
+  if [ -n "$authority_registry" ]; then
+    rm -f "$authority_registry"
+  fi
+}
+trap cleanup_authority_registry EXIT
+
+resolve_authority() {
+  candidate=""
+  if [ "$identity_mode" = "REMOTE_VERIFIED" ]; then
+    if [ "${GATEKEEPER_CI_PR_BASE_SHA+x}" = "x" ]; then
+      authority_source="CI_PR_BASE_SHA"
+      authority_ref="GATEKEEPER_CI_PR_BASE_SHA"
+      candidate="$GATEKEEPER_CI_PR_BASE_SHA"
+      trusted_main_commit="$(git -C "$root" rev-parse --verify "origin/main^{commit}" 2>/dev/null || true)"
+      if [ -z "$trusted_main_commit" ]; then
+        authority_error="origin/main is unavailable"
+        return
+      fi
+      if [[ ! "$candidate" =~ ^[0-9A-Fa-f]{40}$ ]]; then
+        authority_error="GATEKEEPER_CI_PR_BASE_SHA must be exactly 40 hexadecimal characters"
+        return
+      fi
+      if [ "$(git -C "$root" cat-file -t "$candidate" 2>/dev/null || true)" != "commit" ]; then
+        authority_error="GATEKEEPER_CI_PR_BASE_SHA is not a commit in the expected repository"
+        return
+      fi
+      if ! git -C "$root" merge-base --is-ancestor "$candidate" HEAD 2>/dev/null; then
+        authority_error="GATEKEEPER_CI_PR_BASE_SHA is not an ancestor of HEAD"
+        return
+      fi
+      if ! git -C "$root" merge-base --is-ancestor "$candidate" "$trusted_main_commit" 2>/dev/null; then
+        authority_error="GATEKEEPER_CI_PR_BASE_SHA is not an ancestor of trusted origin/main"
+        return
+      fi
+      authority_commit="$candidate"
+    else
+      authority_source="ORIGIN_MAIN"
+      authority_ref="origin/main"
+      authority_commit="$(git -C "$root" rev-parse --verify "origin/main^{commit}" 2>/dev/null || true)"
+      if [ -z "$authority_commit" ]; then
+        authority_commit="NONE"
+        authority_error="origin/main is unavailable"
+        return
+      fi
+      if ! git -C "$root" merge-base --is-ancestor "$authority_commit" HEAD 2>/dev/null; then
+        authority_error="origin/main is not an ancestor of HEAD"
+        return
+      fi
+    fi
+  else
+    authority_source="SNAPSHOT_BASE"
+    authority_ref="$expected_commit"
+    authority_commit="$expected_commit"
+    if [ "$(git -C "$root" cat-file -t "$authority_commit" 2>/dev/null || true)" != "commit" ] || \
+       ! git -C "$root" merge-base --is-ancestor "$authority_commit" HEAD 2>/dev/null; then
+      authority_commit="NONE"
+      authority_error="snapshot base authority is unavailable"
+      return
+    fi
+  fi
+
+  authority_registry="$(mktemp "${TMPDIR:-/tmp}/gatekeeper-authority.XXXXXX")" || {
+    authority_registry=""
+    authority_error="unable to create the authority registry buffer"
+    return
+  }
+  if ! git -C "$root" show "$authority_commit:$registry_path" >"$authority_registry" 2>/dev/null; then
+    rm -f "$authority_registry"
+    authority_registry=""
+    authority_error="trusted authority does not contain the active-lane registry"
+  fi
+}
 
 resolve_lane() {
   node -e '
 const fs = require("fs");
-const [registryPath, expectedSlug, branch] = process.argv.slice(1);
+const path = require("path");
+const { spawnSync } = require("child_process");
+const [registryPath, expectedSlug, branch, root, authorityCommit] = process.argv.slice(1);
 const statuses = ["PROPOSED", "PLANNING_ONLY", "APPROVED", "VERIFIED", "SUPERSEDED", "UNKNOWN"];
 let registry;
 try { registry = JSON.parse(fs.readFileSync(registryPath, "utf8")); } catch { process.exit(2); }
 if (!registry || registry.repository !== expectedSlug) process.exit(3);
 if (!Array.isArray(registry.allowed_statuses) || registry.allowed_statuses.length !== statuses.length ||
     statuses.some((status, index) => registry.allowed_statuses[index] !== status) || !Array.isArray(registry.lanes)) process.exit(2);
-const matches = registry.lanes.filter((lane) => lane && [lane.durable_branch, lane.managed_workspace_branch, lane.branch].includes(branch));
-if (matches.length !== 1 || typeof matches[0].id !== "string" || typeof matches[0].status !== "string") process.exit(1);
+
+const branchFields = ["durable_branch", "managed_workspace_branch", "branch"];
+const invalidPatternChars = /[*?[\]{}^$|()+\\]/;
+const cleanText = (value) => typeof value === "string" && value.length > 0 && !/[\r\n\t\0]/.test(value);
+const validateAllowedPaths = (lane) => {
+  if (!Array.isArray(lane.allowed_paths) || lane.allowed_paths.length === 0) return false;
+  const seen = new Set();
+  for (const entry of lane.allowed_paths) {
+    if (!cleanText(entry) || path.posix.isAbsolute(entry) || /^[A-Za-z]:[\\/]/.test(entry) ||
+        entry.endsWith("/") || path.posix.normalize(entry) !== entry ||
+        entry.split("/").some((part) => part === "" || part === "." || part === ".." || part.toLowerCase() === ".git") ||
+        invalidPatternChars.test(entry) || seen.has(entry)) return false;
+    seen.add(entry);
+    const objectType = spawnSync("git", ["-C", root, "cat-file", "-t", `${authorityCommit}:${entry}`],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    if (objectType.status === 0 && objectType.stdout.trim() === "tree") return false;
+  }
+  return true;
+};
+
+for (const lane of registry.lanes) {
+  if (!lane || !cleanText(lane.id) || typeof lane.status !== "string" || !statuses.includes(lane.status)) process.exit(2);
+  const mappedFields = branchFields.filter((field) => lane[field] !== undefined);
+  if (mappedFields.some((field) => !cleanText(lane[field]))) process.exit(2);
+}
+
+const matches = registry.lanes.filter((lane) => lane && branchFields.some((field) => lane[field] === branch));
+if (matches.length !== 1) process.exit(1);
 const lane = matches[0];
+if (lane.status === "APPROVED" && (!cleanText(lane.owner) || !validateAllowedPaths(lane))) process.exit(2);
 const field = (value) => String(value || "").replace(/[\r\n\t]/g, " ");
 process.stdout.write([field(lane.id), field(lane.status), field(lane.owner)].join("\t") + "\n");
-' "$registry" "$expected_slug" "$branch"
+if (Array.isArray(lane.allowed_paths)) {
+  for (const allowedPath of lane.allowed_paths) process.stdout.write(allowedPath + "\n");
 }
+' "$authority_registry" "$expected_slug" "$branch" "$root" "$authority_commit"
+}
+
+resolve_authority
 
 lane_id="NONE"
 lane_status="UNKNOWN"
 lane_owner=""
-if [ ! -f "$registry" ]; then
-  printf '%s\n' 'ERROR active-lane registry is missing or invalid' >&2
-  exit 15
+lane_data=""
+lane_result=1
+if [ -n "$authority_registry" ]; then
+  lane_data="$(resolve_lane 2>/dev/null)"
+  lane_result=$?
 fi
-lane_data="$(resolve_lane 2>/dev/null)"
-lane_result=$?
+
+authority_invalid=false
 case "$lane_result" in
   0) IFS=$'\t' read -r lane_id lane_status lane_owner <<< "$lane_data" ;;
   1) ;;
-  3) printf '%s\n' 'ERROR active-lane registry repository does not match the durable repository' >&2; exit 11 ;;
-  *) printf '%s\n' 'ERROR active-lane registry is missing or invalid' >&2; exit 15 ;;
+  3)
+    printf '%s\n' 'ERROR active-lane authority repository does not match the durable repository' >&2
+    exit 11
+    ;;
+  *)
+    authority_invalid=true
+    authority_error="trusted active-lane authority is malformed"
+    ;;
 esac
 
-printf 'mode=%s\nroot=%s\nidentity=%s\nrepository=%s\nbranch=%s\nlane=%s\nstatus=%s\nowner=%s\n' \
-  "$mode" "$root" "$identity_mode" "$expected_slug" "${branch:-DETACHED}" "$lane_id" "$lane_status" "${lane_owner:-NONE}"
+allowed_paths=()
+if [ "$lane_result" -eq 0 ]; then
+  while IFS= read -r allowed_path; do
+    allowed_paths+=("$allowed_path")
+  done < <(printf '%s\n' "$lane_data" | tail -n +2)
+fi
+
+printf 'mode=%s\nroot=%s\nidentity=%s\nrepository=%s\nbranch=%s\n' \
+  "$mode" "$root" "$identity_mode" "$expected_slug" "${branch:-DETACHED}"
+printf 'authority_source=%s\nauthority_ref=%s\nauthority_commit=%s\nproposal_registry=%s\n' \
+  "$authority_source" "$authority_ref" "$authority_commit" "$proposal_registry"
+printf 'lane=%s\nstatus=%s\nowner=%s\nallowed_paths=%s\n' \
+  "$lane_id" "$lane_status" "${lane_owner:-NONE}" "${#allowed_paths[@]}"
 
 if [ "$mode" = "inspect" ]; then
+  if [ -n "$authority_error" ]; then
+    printf 'authority_note=%s\n' "$authority_error"
+  fi
+  if [ "$authority_invalid" = true ]; then
+    printf '%s\n' 'ERROR trusted active-lane authority is malformed' >&2
+    exit 15
+  fi
   printf '%s\n' 'result=PASS (read-only inspection)'
   exit 0
 fi
@@ -109,18 +249,59 @@ if [ "$mode" = "mutation" ]; then
     printf '%s\n' 'ERROR mutation on main is prohibited' >&2
     exit 13
   fi
-  if [ "$lane_id" = "NONE" ] || [ "$lane_status" != "APPROVED" ] || [ -z "$lane_owner" ]; then
-    printf '%s\n' 'ERROR current branch requires an approved active lane with an owner' >&2
+  if [ "$identity_mode" = "SNAPSHOT_VERIFIED" ]; then
+    printf '%s\n' 'ERROR mutation requires REMOTE_VERIFIED trusted-mainline authority' >&2
     exit 15
   fi
-  allowed='^(\.github/skills/gatekeeper/SKILL\.md|\.github/skills/gatekeeper/references/session-start\.md|\.github/skills/gatekeeper/references/session-stop\.md|\.ai/governance/repository-profile\.md|\.ai/active-lanes/README\.md|\.ai/active-lanes/datahub-devpost\.json|scripts/check_lane_state\.sh)$'
-  changed="$(git -C "$root" status --short --untracked-files=all | sed -E 's/^.. //' | sed -E 's/.* -> //' || true)"
-  if [ -n "$changed" ] && printf '%s\n' "$changed" | awk -v allowed="$allowed" '$0 !~ allowed { bad=1 } END { exit bad }'; then
-    :
-  elif [ -n "$changed" ]; then
-    printf '%s\n' 'ERROR worktree contains changes outside the active lane scope' >&2
-    exit 14
+  if [ -n "$authority_error" ] || [ "$authority_invalid" = true ]; then
+    printf 'ERROR mutation authority is unavailable or invalid: %s\n' "${authority_error:-unknown authority error}" >&2
+    exit 15
   fi
+  if [ "$lane_id" = "NONE" ] || [ "$lane_status" != "APPROVED" ] || [ -z "$lane_owner" ]; then
+    printf '%s\n' 'ERROR current branch requires an approved lane from trusted mainline authority with an owner' >&2
+    exit 15
+  fi
+
+  status_file="$(mktemp "${TMPDIR:-/tmp}/gatekeeper-status.XXXXXX")" || {
+    printf '%s\n' 'ERROR unable to buffer Git worktree status' >&2
+    exit 15
+  }
+  git -C "$root" status --porcelain=v1 -z --untracked-files=all >"$status_file"
+  status_result=$?
+  if [ "$status_result" -ne 0 ]; then
+    rm -f "$status_file"
+    printf '%s\n' 'ERROR unable to read Git worktree status' >&2
+    exit 15
+  fi
+
+  changed_paths=()
+  while IFS= read -r -d '' status_record; do
+    status_code="${status_record:0:2}"
+    changed_paths+=("${status_record:3}")
+    if [[ "$status_code" == *R* || "$status_code" == *C* ]]; then
+      IFS= read -r -d '' source_path || {
+        rm -f "$status_file"
+        printf '%s\n' 'ERROR malformed Git porcelain rename record' >&2
+        exit 15
+      }
+      changed_paths+=("$source_path")
+    fi
+  done <"$status_file"
+  rm -f "$status_file"
+
+  for changed_path in "${changed_paths[@]}"; do
+    path_allowed=false
+    for allowed_path in "${allowed_paths[@]}"; do
+      if [ "$changed_path" = "$allowed_path" ]; then
+        path_allowed=true
+        break
+      fi
+    done
+    if [ "$path_allowed" != true ]; then
+      printf 'ERROR worktree path is outside the active lane scope: %s\n' "$changed_path" >&2
+      exit 14
+    fi
+  done
   printf '%s\n' 'result=PASS (validation only; no mutation performed)'
   exit 0
 fi
@@ -135,6 +316,10 @@ if [ "$identity_mode" != "REMOTE_VERIFIED" ]; then
 fi
 
 if [ "$mode" = "merge" ]; then
+  if [ -n "$authority_error" ] || [ "$authority_invalid" = true ]; then
+    printf 'ERROR merge authority is unavailable or invalid: %s\n' "${authority_error:-unknown authority error}" >&2
+    exit 15
+  fi
   if [[ "$GATEKEEPER_PR_NUMBER" =~ ^[0-9]+$ ]] && \
      [[ "$GATEKEEPER_EXPECTED_HEAD" =~ ^[0-9A-Fa-f]{40}$ ]] && \
      [[ "$GATEKEEPER_CURRENT_HEAD" = "$GATEKEEPER_EXPECTED_HEAD" ]] && \
