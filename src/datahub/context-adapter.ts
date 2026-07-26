@@ -113,6 +113,7 @@ export class DataHubContextAdapter implements ContextAdapter<unknown> {
     const title = this.asNonEmptyString(typedEntity.title) ?? `Untitled record ${id}`;
     const summary = this.asNonEmptyString(typedEntity.description) ?? "No summary available.";
     const sourceType = this.asNonEmptyString(typedEntity.sourceType) ?? "datahub";
+    const canonicalUrl = this.asNonEmptyString(typedEntity.canonicalUrl);
     const retrievedAt = this.asIsoTimestamp(typedEntity.retrievedAt);
 
     if (!retrievedAt) {
@@ -124,9 +125,9 @@ export class DataHubContextAdapter implements ContextAdapter<unknown> {
       {
         id,
         title,
-        canonicalUrl: this.asNonEmptyString(typedEntity.canonicalUrl),
         sourceType,
-        retrievedAt
+        retrievedAt,
+        ...(canonicalUrl ? { canonicalUrl } : {})
       }
     ];
 

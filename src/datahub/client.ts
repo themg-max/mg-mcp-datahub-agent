@@ -13,7 +13,7 @@ export interface DataHubClientOptions {
  */
 export class DataHubClient {
   private readonly baseUrl: string;
-  private readonly token?: string;
+  private readonly token: string | undefined;
   private readonly timeoutMs: number;
 
   public constructor(options: DataHubClientOptions) {
