@@ -1,0 +1,43 @@
+{
+  "repository": "themg-max/mg-mcp-datahub-agent",
+  "profile_status": "PROPOSED",
+  "allowed_statuses": [
+    "PROPOSED",
+    "PLANNING_ONLY",
+    "APPROVED",
+    "VERIFIED",
+    "SUPERSEDED",
+    "UNKNOWN",
+    "PRESERVED"
+  ],
+  "lanes": [
+    {
+      "id": "architecture-datahub-skill-execution",
+      "status": "VERIFIED",
+      "pr": 2,
+      "merge_commit": "1e5e7a19bfff280d351373ae43c41cefeaab56f9",
+      "artifact": "docs/datahub-skill-execution-architecture.md"
+    },
+    {
+      "id": "devpost-repo-governance",
+      "status": "APPROVED",
+      "durable_branch": "chore/devpost-repo-governance",
+      "managed_workspace_branch": "work",
+      "owner": "governance-implementation-owner",
+      "artifact": "repository-native Gatekeeper governance files",
+      "note": "APPROVED authorizes this bounded implementation lane but does not make the proposed governance profile authoritative before merge."
+    },
+    {
+      "id": "fixture-demo-preservation",
+      "status": "PRESERVED",
+      "branch": "feat/datahub-fixture-demo-slice",
+      "commit": "86b1cb01e23474308455179c0c3c91e4de7f8ea8"
+    },
+    {
+      "id": "fixture-demo-mainline",
+      "status": "PLANNING_ONLY",
+      "branch": "feat/datahub-fixture-demo-mainline",
+      "base": "1e5e7a19bfff280d351373ae43c41cefeaab56f9"
+    }
+  ]
+}
