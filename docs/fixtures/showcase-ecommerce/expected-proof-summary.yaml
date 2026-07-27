@@ -1,0 +1,138 @@
+schema_name: governed_development_proof_summary
+schema_version: "1.0"
+record_id: expected-showcase-ecommerce-proof-summary-v1
+status: blocked
+authority_status: proposed
+execution_status: blocked
+retrieval_status: partial
+request:
+  logical_dataset: showcase-ecommerce
+  scenario_key: safe-customer-email-migration
+  objective: safe dbt schema migration
+source:
+  selected_mode: OFFLINE_FIXTURE
+  allowed_modes:
+    - OFFLINE_FIXTURE
+    - ISOLATED_DATAHUB_READ_ONLY
+  source_mode_policy: allowed
+  dataset_urn: UNKNOWN
+  official_datapack_record_id: UNKNOWN
+  fixture_record_id: showcase-ecommerce-fixture-manifest-v1
+packet_binding:
+  packet_record_id: UNKNOWN
+  packet_content_digest: UNKNOWN
+  context_record_id: expected-showcase-ecommerce-context-summary-v1
+  context_content_digest: UNKNOWN
+  pre_retrieval_manifest_digest: UNKNOWN
+  approved_writable_paths:
+    - docs/plans/showcase-ecommerce-fixture-contract-plan.md
+    - docs/fixtures/showcase-ecommerce/fixture-manifest.yaml
+    - docs/fixtures/showcase-ecommerce/scenario-safe-customer-email-migration.yaml
+    - docs/fixtures/showcase-ecommerce/expected-context-summary.yaml
+    - docs/fixtures/showcase-ecommerce/expected-proof-summary.yaml
+  execution_status: blocked
+  expires_at: UNKNOWN
+  digest_binding: UNKNOWN
+selected_skill:
+  skill_id: UNKNOWN
+  source: UNKNOWN
+  version: UNKNOWN
+  license: UNKNOWN
+  content_digest: UNKNOWN
+  binding_validation: UNKNOWN
+source_attribution:
+  - source_system: repository
+    source_identifier: docs/datahub-mg-mcp-skill-bridge-architecture.md
+    source_updated_at: UNKNOWN
+    checked_at: UNKNOWN
+    freshness_age: UNKNOWN
+    content_digest: UNKNOWN
+  - source_system: repository
+    source_identifier: LICENSE
+    source_updated_at: UNKNOWN
+    checked_at: UNKNOWN
+    freshness_age: UNKNOWN
+    content_digest: UNKNOWN
+warnings:
+  - code: OFFICIAL_DATAPACK_UNVERIFIED
+    message: Official datapack provenance and license remain UNKNOWN.
+    source: repository
+    related_record_id: null
+  - code: MG_MCP_RETRIEVAL_GAP
+    message: Exact PR #6 and fixture-planning MG MCP records were not surfaced.
+    source: MG MCP
+    related_record_id: null
+unknowns:
+  - field: all executable entity identifiers
+    reason: No approved DataHub read-only discovery evidence is present in this contract.
+    source: DataHub
+    blocking: true
+    next_check: Run bounded isolated read-only discovery or load an approved fixture.
+  - field: packet and context content digests
+    reason: Digests are computed by the future implementation and are not fabricated.
+    source: orchestrator
+    blocking: true
+    next_check: Compute RFC8785 JCS SHA-256 digests at execution time.
+  - field: selected immutable skill identity
+    reason: Skill source, version, license, and digest were not selected.
+    source: MG MCP
+    blocking: true
+    next_check: Bind an approved immutable skill in a separate implementation plan.
+execution_evidence:
+  tools_executed: []
+  commands_executed:
+    - python3 -m json.tool .ai/active-lanes/datahub-devpost.json
+    - strict YAML contract validation
+    - ./scripts/check_lane_state.sh inspect
+    - ./scripts/check_lane_state.sh mutation
+    - git diff --check
+  unauthorized_tools: []
+  unauthorized_commands: []
+  authorization_set_validation: expected
+validation:
+  - command: JSON registry validation
+    result: required
+    evidence: .ai/active-lanes/datahub-devpost.json
+  - command: strict YAML parse with duplicate-key rejection
+    result: required
+    evidence: four fixture contract files
+  - command: Gatekeeper mutation validation
+    result: required
+    evidence: approved lane and five literal paths
+  - command: exact changed-path containment
+    result: required
+    evidence: five allowed planning paths only
+  - command: git diff --check
+    result: required
+    evidence: branch diff
+forbidden_operation:
+  attempted_operation: symbolic DataHub write tool
+  actual_write_endpoint_contacted: false
+  expected_failure_code: FORBIDDEN_OPERATION_ATTEMPTED
+  expected_status: fail_closed
+  proof_requirement: retain attempted operation and blocking result
+scope_check:
+  changed_paths:
+    - docs/plans/showcase-ecommerce-fixture-contract-plan.md
+    - docs/fixtures/showcase-ecommerce/fixture-manifest.yaml
+    - docs/fixtures/showcase-ecommerce/scenario-safe-customer-email-migration.yaml
+    - docs/fixtures/showcase-ecommerce/expected-context-summary.yaml
+    - docs/fixtures/showcase-ecommerce/expected-proof-summary.yaml
+  unauthorized_paths: []
+  containment_validation: expected_pass
+  blocked_operations_attempted:
+    - runtime code mutation
+    - DataHub write
+    - MG MCP write
+    - deployment
+    - merge
+review:
+  reviewer_disposition: pending
+  merge_recommendation: pending
+  next_owner: independent reviewer
+digest:
+  algorithm: RFC8785_JCS_SHA256
+  target: proof_record_excluding_digest_evidence
+  expected: UNKNOWN
+  observed: UNKNOWN
+  validation: UNKNOWN

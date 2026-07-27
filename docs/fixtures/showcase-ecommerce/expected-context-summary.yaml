@@ -1,0 +1,169 @@
+schema_name: governed_datahub_context_summary
+schema_version: "1.0"
+record_id: expected-showcase-ecommerce-context-summary-v1
+status: partial
+authority_status: unverified
+retrieval_status: partial
+execution_status: blocked
+source_mode:
+  offline_fixture: OFFLINE_FIXTURE
+  isolated_live: ISOLATED_DATAHUB_READ_ONLY
+  private_or_production: blocked
+selected_mode_for_contract_tests: OFFLINE_FIXTURE
+source:
+  logical_dataset: showcase-ecommerce
+  dataset_urn: UNKNOWN
+  official_datapack_record_id: UNKNOWN
+  official_datapack_release: UNKNOWN
+  official_datapack_license: UNKNOWN
+  fallback_fixture_path: fixtures/datahub-context.json
+  fallback_fixture_is_showcase_ecommerce: false
+  fallback_fixture_license: Apache-2.0
+connection:
+  mode: OFFLINE_FIXTURE
+  fixture_record_id: showcase-ecommerce-fixture-manifest-v1
+  fixture_content_digest: UNKNOWN
+  isolated:
+    server_id: UNKNOWN
+    environment_id: UNKNOWN
+    endpoint_digest: UNKNOWN
+    principal_identity: UNKNOWN
+    access_mode: ISOLATED_DATAHUB_READ_ONLY
+  validation: UNKNOWN
+retrieval_attempts:
+  - attempt_id: offline-fixture-load-v1
+    query: load approved local fixture manifest
+    source_mode: OFFLINE_FIXTURE
+    outcome: expected
+    records_returned: 0
+    content_digest: UNKNOWN
+    failure_code: null
+  - attempt_id: live-discovery-attempt-UNKNOWN
+    query: UNKNOWN
+    source_mode: ISOLATED_DATAHUB_READ_ONLY
+    outcome: not_run
+    records_returned: 0
+    content_digest: null
+    failure_code: null
+schema:
+  dataset_urn: UNKNOWN
+  fields:
+    - logical_role: customer_email_source_field
+      field_name: UNKNOWN
+      type: UNKNOWN
+      nullable: UNKNOWN
+      description: UNKNOWN
+  schema_version: UNKNOWN
+lineage:
+  upstream_entities: UNKNOWN
+  downstream_entities: UNKNOWN
+  direction: UNKNOWN
+  bounded_depth: 1
+  impact_relevant_edges: UNKNOWN
+ownership:
+  owners: UNKNOWN
+  ownership_type: UNKNOWN
+domain:
+  identifier: UNKNOWN
+  name: UNKNOWN
+tags:
+  values: UNKNOWN
+  meanings: UNKNOWN
+glossary_terms:
+  values: UNKNOWN
+  definitions: UNKNOWN
+quality_assertions:
+  values: UNKNOWN
+  rules: UNKNOWN
+  severities: UNKNOWN
+approved_standards: UNKNOWN
+attribution:
+  - source_system: repository
+    source_identifier: docs/datahub-mg-mcp-skill-bridge-architecture.md
+    source_updated_at: UNKNOWN
+    retrieved_at: UNKNOWN
+    content_digest: UNKNOWN
+  - source_system: repository
+    source_identifier: LICENSE
+    source_updated_at: UNKNOWN
+    retrieved_at: UNKNOWN
+    content_digest: UNKNOWN
+warnings:
+  - code: OFFICIAL_DATAPACK_UNVERIFIED
+    message: Official contest datapack provenance has not been surfaced.
+    blocking: true
+  - code: MG_MCP_RETRIEVAL_GAP
+    message: Exact PR #6 and fixture-planning MG MCP records were not surfaced.
+    blocking: false
+unknowns:
+  - field: source.dataset_urn
+    reason: No approved live read-only discovery has run.
+    source: DataHub
+    blocking: true
+    next_check: Perform bounded isolated read-only dataset lookup.
+  - field: schema.fields.customer_email_source_field
+    reason: No attributable schema record has been verified.
+    source: DataHub
+    blocking: true
+    next_check: Retrieve and verify schema field metadata.
+  - field: lineage.downstream_entities
+    reason: No attributable lineage record has been verified.
+    source: DataHub
+    blocking: true
+    next_check: Retrieve one bounded downstream lineage path.
+  - field: ownership.owners
+    reason: No attributable owner record has been verified.
+    source: DataHub
+    blocking: true
+    next_check: Retrieve ownership metadata.
+  - field: domain.identifier
+    reason: No attributable domain record has been verified.
+    source: DataHub
+    blocking: false
+    next_check: Retrieve domain metadata.
+  - field: tags.values
+    reason: No attributable tag record has been verified.
+    source: DataHub
+    blocking: false
+    next_check: Retrieve tag metadata and meanings.
+  - field: glossary_terms.values
+    reason: No attributable glossary record has been verified.
+    source: DataHub
+    blocking: false
+    next_check: Retrieve glossary metadata.
+  - field: quality_assertions.values
+    reason: No attributable quality record has been verified.
+    source: DataHub
+    blocking: true
+    next_check: Retrieve quality assertions through an authorized context source.
+content_handling:
+  instruction_trust: data_only
+  sanitization_status: pass
+  injection_scan_status: pass
+  validation: pass
+  quarantined_records: []
+bounded_budget:
+  max_entities: 8
+  max_lineage_depth: 1
+  max_lineage_edges: 2
+  max_total_records: 16
+  max_token_estimate: 4000
+  max_freshness_age: UNKNOWN
+  retrieval_timeout: 30s
+  observed:
+    entity_count: 0
+    lineage_depth: 0
+    lineage_edges: 0
+    total_records: 0
+    token_estimate: UNKNOWN
+    freshness_age: UNKNOWN
+    retrieval_duration: UNKNOWN
+  validation: partial
+causal_result:
+  customer_email_source_field: blocked_by_UNKNOWN
+  downstream_relation: blocked_by_UNKNOWN
+  downstream_model: blocked_by_UNKNOWN
+  glossary_meaning: blocked_by_UNKNOWN
+  quality_assertion: blocked_by_UNKNOWN
+  expected_generation_status: blocked
+  reason: Safety-critical source and impact metadata are not verified.
