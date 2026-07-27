@@ -374,12 +374,19 @@ if [ "$mode" = "mutation" ]; then
   rm -f "$committed_file"
 
   # Form the union of committed_paths and worktree changed_paths (deduplicate)
-  declare -A effective_map
-  for p in "${committed_paths[@]}"; do effective_map["$p"]=1; done
-  for p in "${changed_paths[@]}"; do effective_map["$p"]=1; done
-
   effective_paths=()
-  for p in "${!effective_map[@]}"; do effective_paths+=("$p"); done
+  if [ ${#committed_paths[@]} -gt 0 ] || [ ${#changed_paths[@]} -gt 0 ]; then
+    tmpfile="$(mktemp "${TMPDIR:-/tmp}/gatekeeper-effective.XXXXXX")" || { printf '%s\n' 'ERROR unable to buffer effective paths' >&2; exit 15; }
+    for p in "${committed_paths[@]}" "${changed_paths[@]}"; do
+      # skip empty entries
+      if [ -n "$p" ]; then printf '%s\n' "$p" >>"$tmpfile"; fi
+    done
+    # sort -u to deduplicate; read back into array without requiring associative arrays or mapfile
+    while IFS= read -r line; do
+      effective_paths+=("$line")
+    done < <(sort -u "$tmpfile")
+    rm -f "$tmpfile"
+  fi
 
   # Validate every effective path literally against trusted allowed_paths
   for changed_path in "${effective_paths[@]}"; do
