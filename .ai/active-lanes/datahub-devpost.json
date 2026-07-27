@@ -66,6 +66,21 @@
       ],
       "artifact": "bounded active-lane registration proposal",
       "note": "Reusable registry-only intake lane. One active intake PR at a time. This lane may propose future lane authority but may not modify implementation, documentation, runtime, deployment, credential, IAM, DataHub, or MG MCP surfaces."
+    },
+    {
+      "id": "datahub-showcase-ecommerce-fixture-contract",
+      "status": "PLANNING_ONLY",
+      "durable_branch": "plan/datahub-showcase-ecommerce-fixture-contract",
+      "owner": "datahub-fixture-planning-owner",
+      "artifact": "docs/plans/showcase-ecommerce-fixture-contract-plan.md",
+      "allowed_paths": [
+        "docs/plans/showcase-ecommerce-fixture-contract-plan.md",
+        "docs/fixtures/showcase-ecommerce/fixture-manifest.yaml",
+        "docs/fixtures/showcase-ecommerce/scenario-safe-customer-email-migration.yaml",
+        "docs/fixtures/showcase-ecommerce/expected-context-summary.yaml",
+        "docs/fixtures/showcase-ecommerce/expected-proof-summary.yaml"
+      ],
+      "note": "Planning-only lane for defining the deterministic showcase-ecommerce fixture contract and first metadata-aware dbt migration scenario. No runtime implementation, connector changes, dependency changes, deployment, credentials, private data, DataHub writes, or MG MCP writes are authorized."
     }
   ]
 }
