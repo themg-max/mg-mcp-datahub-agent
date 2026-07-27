@@ -329,6 +329,9 @@ for (const lane of registry.lanes) {
     printf '%s\n' 'ERROR candidate active-lane registry at HEAD is malformed or invalid' >&2
     exit 15
   }
+  if [ "${KEEP_CANDIDATE_REGISTRY:-false}" = true ]; then
+    return 0
+  fi
   if ! rm -f "$candidate_registry"; then
     candidate_registry=""
     printf '%s\n' 'ERROR unable to clean up candidate registry buffer' >&2
@@ -498,8 +501,14 @@ validate_bootstrap_transition() {
     exit 15
   fi
   validate_bootstrap_scope
+  KEEP_CANDIDATE_REGISTRY=true validate_candidate_registry
   validate_bootstrap_candidate_contract
-  validate_candidate_registry
+  rm -f "$candidate_registry" || {
+    candidate_registry=""
+    printf '%s\n' 'ERROR unable to clean up candidate registry buffer' >&2
+    exit 15
+  }
+  candidate_registry=""
   printf '%s\n' 'result=PASS (bootstrap transition evidence complete; no merge performed)'
   exit 0
 }
