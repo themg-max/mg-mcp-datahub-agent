@@ -51,19 +51,10 @@
     },
     {
       "id": "gatekeeper-lane-scoped-allowlists",
-      "status": "APPROVED",
-      "durable_branch": "fix/gatekeeper-lane-scoped-allowlists",
-      "owner": "governance-implementation-owner",
-      "allowed_paths": [
-        ".ai/active-lanes/README.md",
-        ".ai/active-lanes/datahub-devpost.json",
-        ".github/skills/gatekeeper/SKILL.md",
-        ".github/skills/gatekeeper/references/session-start.md",
-        ".github/skills/gatekeeper/references/session-stop.md",
-        "scripts/check_lane_state.sh"
-      ],
-      "artifact": "lane-scoped Gatekeeper path enforcement",
-      "note": "Bounded compatibility repair enabling exact per-lane path enforcement. No implementation, deployment, IAM, secret, DataHub-write, or MG MCP-write work is authorized."
+      "status": "VERIFIED",
+      "pr": 4,
+      "merge_commit": "a698a54b88eceff2db3b2b1532eab6ff466d95de",
+      "artifact": "lane-scoped Gatekeeper path enforcement"
     },
     {
       "id": "lane-registry-intake",
