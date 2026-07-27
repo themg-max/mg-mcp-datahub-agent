@@ -110,6 +110,11 @@ status: complete|partial|empty|conflict|unknown
 authority_status: authoritative|proposed|unverified|conflict|unknown
 execution_status: not_started|blocked|approved|executing|validated|failed
 retrieval_status: not_started|retrieving|complete|partial|empty|timeout|failed
+failures:
+  - code: APPROVAL_REQUIRED|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID
+    message: <human-readable-detail>
+    blocking: true|false
+    source: DataHub|MG MCP|repository|orchestrator|proof
 content_digest: sha256:<digest>
 supersedes: <record-id-or-null>
 related_artifacts:
@@ -194,6 +199,14 @@ request_id: <request-id>
 created_at: <ISO-8601>
 created_by: orchestrator
 status: proposed|approved|executing|validated|blocked
+authority_status: authoritative|proposed|unverified|conflict|unknown
+execution_status: not_started|blocked|approved|executing|validated|failed
+retrieval_status: not_started|retrieving|complete|partial|empty|timeout|failed
+failures:
+  - code: APPROVAL_REQUIRED|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID
+    message: <human-readable-detail>
+    blocking: true|false
+    source: DataHub|MG MCP|repository|orchestrator|proof
 content_digest: sha256:<digest>
 supersedes: <packet-id-or-null>
 related_artifacts: []
@@ -208,6 +221,7 @@ repository:
     path: <validated-absolute-worktree-path>
     head_sha: <40-hex>
     repository_root: <validated-absolute-repository-root>
+    common_dir: <validated-absolute-git-common-directory>
     validation: pass|fail
   writable_paths:
     - <narrow-output-path>
@@ -223,10 +237,6 @@ allowed_commands: []
 required_artifacts: []
 validation: []
 stop_condition: stop at proof return or any UNKNOWN/conflict affecting safety
-approval:
-  required: true
-  reviewer: null
-  disposition: null
 expires_at: <ISO-8601>
 context_budget:
   max_entities: <positive-integer>
@@ -262,8 +272,11 @@ in the packet and copied into proof.
 The worktree identity is validated before packet approval by resolving the Git
 repository root, common directory, current branch, exact `HEAD` SHA, and
 absolute worktree path. The path must be the intended active worktree, the
-branch must not be `main`, and the packet's `repository_root`, `identity`,
-`path`, `branch`, and `head_sha` must match the validation result exactly.
+branch must not be `main`, and the packet's
+`repository.worktree.repository_root`, `repository.worktree.identity`,
+`repository.worktree.path`, `repository.worktree.common_dir`,
+`repository.branch`, and `repository.worktree.head_sha` must match the
+validation result exactly.
 
 ## 8. Generated artifact contract
 
@@ -299,6 +312,11 @@ status: pass|blocked|unknown
 authority_status: authoritative|proposed|unverified|conflict|unknown
 execution_status: not_started|blocked|approved|executing|validated|failed
 retrieval_status: not_started|retrieving|complete|partial|empty|timeout|failed
+failures:
+  - code: APPROVAL_REQUIRED|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID
+    message: <human-readable-detail>
+    blocking: true|false
+    source: DataHub|MG MCP|repository|orchestrator|proof
 content_digest: sha256:<digest>
 supersedes: <proof-id-or-null>
 related_artifacts: []
@@ -315,6 +333,48 @@ validation:
   - command: <existing command>
     result: pass|fail|unknown
     evidence: <output reference>
+approval:
+  required: true
+  human_approved: false
+  reviewer_identity: null
+  approved_at: null
+  disposition: null
+  approved_head_sha: null
+  validation: pass|fail
+worktree:
+  identity: <validated-absolute-worktree-path-and-git-common-dir>
+  path: <validated-absolute-worktree-path>
+  head_sha: <40-hex>
+  repository_root: <validated-absolute-repository-root>
+  common_dir: <validated-absolute-git-common-directory>
+  branch: <non-main-branch>
+  validation: pass|fail
+context_budget:
+  limits:
+    max_entities: <positive-integer>
+    max_lineage_depth: <positive-integer>
+    max_lineage_edges: <positive-integer>
+    max_total_records: <positive-integer>
+    max_token_estimate: <positive-integer>
+    max_freshness_age: <duration>
+    retrieval_timeout: <duration>
+  observed:
+    entity_count: <non-negative-integer>
+    lineage_depth: <non-negative-integer>
+    lineage_edges: <non-negative-integer>
+    total_records: <non-negative-integer>
+    token_estimate: <non-negative-integer>
+    freshness_age: <duration>
+    retrieval_duration: <duration>
+  validation: pass|fail
+digest:
+  algorithm: RFC8785_JCS_SHA256
+  canonicalization: RFC8785
+  excluded_fields:
+    - content_digest
+  expected: sha256:<64-lowercase-hex>
+  observed: sha256:<64-lowercase-hex>
+  validation: pass|fail
 scope_check:
   changed_paths: []
   forbidden_operations_attempted: []
