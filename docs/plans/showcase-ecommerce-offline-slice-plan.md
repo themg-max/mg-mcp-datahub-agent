@@ -37,7 +37,8 @@ Use `packet_representation_version: split-v1` and
    immutable record ID and RFC 8785 JCS SHA-256 content digest.
 2. Create mutable `packet_state` with its own ID, `state_version: 1`, state digest,
    and exact references to the pre-retrieval record. It has no final packet
-   binding yet.
+   binding yet. Every state digest is computed over the canonical state with only
+   its own `state_digest` field omitted.
 3. After successful retrieval, observed connection validation, runtime budget
    enforcement, freshness, screening, and canonical context construction, create
    a new immutable final `packet_content`. Never mutate the pre-retrieval record.
@@ -47,11 +48,22 @@ Use `packet_representation_version: split-v1` and
    connection, inventory, screening, context, and execution bindings.
 5. Immediately after final `packet_content` is created, update `packet_state`
    with the final `packet_content_record_id` and `packet_content_digest`, increment
-   `state_version`, and recompute the canonical `state_digest`. Approval is
-   prohibited until this exact transition and binding validate. A missing final
-   binding, stale state version, or state-digest mismatch returns
+   `state_version`, set `previous_state_digest`, and recompute canonical
+   `state_digest`. Approval is prohibited until this transition validates. A
+   missing final binding, stale version, or state-digest mismatch returns
    `PACKET_APPROVAL_MISMATCH`.
-6. Final `packet_content` is the singular governed packet for approval and proof.
+6. Immediately before human approval, create immutable
+   `approval_state_snapshot` from the final-bound state. The snapshot contains
+   the state record ID/version, final packet references, retrieval/context/
+   inventory/worktree bindings, approval requirement, and expiry, but excludes
+   approval fields, `approval_core_digest`, future statuses, future timestamps,
+   transition evidence, failures, warnings, and proof-emission fields. Its digest
+   omits only its own digest field.
+7. Human approval binds to the immutable `approval_state_snapshot`, not to the
+   digest of a later mutable state. Later `packet_state` versions must increment
+   `state_version`, carry `previous_state_digest`, recompute `state_digest`, and
+   form a permitted descendant chain from the approved snapshot.
+8. Final `packet_content` is the singular governed packet for approval and proof.
    Proof separately carries `retrieval_authorization_binding` to the immutable
    pre-retrieval record. Missing lifecycle evidence is `PROOF_INCOMPLETE`;
    carried-forward drift is `DIGEST_INVALID`; approval or proof bound to the
@@ -98,36 +110,45 @@ Use `packet_representation_version: split-v1` and
     `SCREENING_FAILED`.
 17. Build canonical context and create final immutable `packet_content` through
     the supersession contract.
-18. Bind `packet_state` to the final packet, increment `state_version`, recompute
-    `state_digest`, and validate the full pre-retrieval-to-final chain before
-    approval.
+18. Bind `packet_state` to the final packet, increment `state_version`, set
+    `previous_state_digest`, recompute `state_digest`, and validate the full
+    pre-retrieval-to-final chain before approval.
 19. Resolve repository root, Git common directory, absolute registered worktree,
     non-`main` branch, exact head, and canonical Git status. Require
     `untracked_policy: deny_all` and a clean checkout before approval.
 20. Validate observed connection evidence, retrieval attempts, budgets,
     inventory, screening, context, packet lifecycle, state-to-final-packet
     binding, and worktree.
-21. Validate affirmative approval and compute `approval_core_digest` over
+21. Create immutable `approval_state_snapshot` from the final-bound state and
+    validate its canonical digest.
+22. Validate affirmative approval and compute `approval_core_digest` over
     `human_approved`, reviewer, disposition, approved time/head/digests,
-    immutable packet references, current packet-state ID/version/digest, approved
-    worktree-status digest, and expiry.
-22. Validate trusted time before approval, before render, at render completion,
+    immutable packet references, `approval_state_snapshot` ID/digest, approved
+    worktree-status digest, and expiry. The core excludes its own digest and all
+    later mutable state IDs, versions, digests, statuses, timestamps, and
+    transition evidence.
+23. Validate trusted time before approval, before render, at render completion,
     at validation, and immediately before final emission. Late or invalid
     evidence is `PACKET_EXPIRED`.
-23. Immediately before rendering, revalidate the complete approval core, current
-    packet-state digest/version and final packet references, tool inventory,
-    packet, worktree, and expiry.
-24. Render only through a pure in-memory function that returns strings/bytes and
+24. After approval, each permitted state transition increments `state_version`,
+    links `previous_state_digest`, and recomputes `state_digest`; the immutable
+    approval snapshot and `approval_core_digest` do not change.
+25. Immediately before rendering, revalidate the immutable approval snapshot and
+    stable approval core, then prove the current packet state is a valid permitted
+    descendant with unchanged approval-bearing fields, valid packet references,
+    tool inventory, worktree, and expiry.
+26. Render only through a pure in-memory function that returns strings/bytes and
     has no filesystem, subprocess, Git, network, DataHub-write, or MG-MCP-write
     capability.
-25. Immediately after rendering, run a fresh Git identity/status check as defense
+27. Immediately after rendering, run a fresh Git identity/status check as defense
     in depth.
-26. Immediately before `proposal_ready`, re-read mutable `packet_state` and
-    revalidate `human_approved`, reviewer, disposition, approved head/digests,
-    immutable references, final packet binding, worktree digest, expiry,
-    `approval_core_digest`, current state digest/version, inventory, and
-    transition chain.
-27. Emit only when all gates pass; otherwise discard the in-memory proposal and
+28. Immediately before `proposal_ready`, re-read mutable `packet_state`, validate
+    its current digest/version and complete `previous_state_digest` chain back to
+    the approved snapshot, and revalidate `human_approved`, reviewer,
+    disposition, approved head/digests, immutable references, final packet
+    binding, worktree digest, expiry, stable `approval_core_digest`, inventory,
+    and permitted transition chain.
+29. Emit only when all gates pass; otherwise discard the in-memory proposal and
     return the exact blocked result.
 
 ## Retrieval budgets and freshness
@@ -182,19 +203,25 @@ Failure precedence is deterministic:
 Blocked proof records `observed_changed_paths` and must not claim no mutation
 when evidence shows one.
 
-## Mutable approval-state revalidation
+## Stable approval snapshot and mutable-state revalidation
 
-Final emission cannot rely on a pre-render mutable-state snapshot. Re-read the
-current state and require affirmative approval, unchanged reviewer/disposition,
-approved head and digests, immutable record references, current final-packet
-binding, approved worktree digest, expiry, and `approval_core_digest`, plus a
-valid current state digest/version and permitted transition chain.
+`approval_state_snapshot` is immutable. `approval_core_digest` binds to that
+snapshot, final immutable packet content, approved worktree/head, reviewer,
+disposition, approval time, and expiry. It never binds to a later mutable
+`packet_state.state_digest`, so permitted execution transitions cannot change
+what the human approved.
+
+Every later mutable state carries a strictly increasing `state_version`, exact
+`previous_state_digest`, recomputed current `state_digest`, unchanged approval
+snapshot ID/digest, unchanged approval core, and an allowed transition name.
+Final emission validates the complete descendant chain and approval-bearing
+fields.
 
 - revoked or false approval -> `APPROVAL_REQUIRED`;
-- malformed state -> `APPROVAL_INVALID`;
+- malformed snapshot, state, or descendant chain -> `APPROVAL_INVALID`;
 - missing/invalid exact-head evidence -> `APPROVAL_HEAD_MISMATCH`;
-- packet, content, worktree, head, state, or proof binding drift ->
-  `PACKET_APPROVAL_MISMATCH`.
+- approval-core, packet, content, worktree, head, snapshot, or proof binding drift
+  -> `PACKET_APPROVAL_MISMATCH`.
 
 ## Exact failure codes
 
@@ -226,15 +253,16 @@ valid current state digest/version and permitted transition chain.
 A success result includes exact request/mode, manifest and observed fixture
 bindings, immutable skill, fresh tool inventory, retrieval attempts, declared
 and observed budgets, canonical context/provenance/freshness, retrieval and final
-packet bindings, current packet-state ID/version/digest and exact final-packet
-binding, complete approval core, worktree and transition evidence, authorized
-tool/command evidence, in-memory SQL and dbt-YAML strings,
-`executed_writes: []`, and a non-self-referential RFC 8785 JCS SHA-256 proof
-digest.
+packet bindings, immutable approval-state snapshot ID/digest, stable approval
+core, current packet-state ID/version/digest, complete state descendant chain,
+worktree and transition evidence, authorized tool/command evidence, in-memory SQL
+and dbt-YAML strings, `executed_writes: []`, and a non-self-referential RFC 8785
+JCS SHA-256 proof digest.
 
 Proof acceptance requires exact packet/context/proof equality for connection,
 attempts, skill, inventory, budgets, freshness, screening, worktree, packet-state
-to final-packet binding, approval, expiry, scope, and actual tools/commands.
+to final-packet binding, approval snapshot/core, current state descendant chain,
+expiry, scope, and actual tools/commands.
 
 ## Proposed implementation paths
 
@@ -246,12 +274,13 @@ A separate `APPROVED` implementation lane may later authorize:
    counters including maximum lineage depth, retrieval attempts, observed
    connection binding, freshness, screening, provenance, and canonical context.
 3. `src/showcase-ecommerce/approval.ts` — two-stage packet lifecycle, explicit
-   state-to-final-packet transition, mutable state, approval-core digest,
-   worktree binding, final-state validation, and expiry.
+   state-to-final-packet transition, immutable approval-state snapshot, stable
+   approval-core digest, descendant state chain, worktree binding, final-state
+   validation, and expiry.
 4. `src/showcase-ecommerce/proposal.ts` — pure in-memory renderer.
 5. `src/showcase-ecommerce/proof.ts` — connection, attempts, inventory, budgets,
-   packet and packet-state bindings, worktree, approval, scope, transition, and
-   digest evidence.
+   packet and packet-state bindings, approval snapshot/core and descendant chain,
+   worktree, scope, transition, and digest evidence.
 6. `src/cli.ts`, bounded fixtures, tests, and judge examples only as explicitly
    allowlisted by that future lane.
 
@@ -266,8 +295,10 @@ attempt evidence for empty/partial/timeout/failure; an empty result with complet
 evidence not being `RETRIEVAL_EVIDENCE_INVALID`; missing/mismatched attempt
 evidence being `RETRIEVAL_EVIDENCE_INVALID`; source freshness; screening;
 packet supersession; missing final packet-state binding; stale state version or
-digest; worktree identity and scope precedence; side-effect-free rendering;
-mutable approval-state change; expiry at every transition; and incomplete proof.
+digest; immutable approval snapshot stability through permitted state
+transitions; broken `previous_state_digest`; mutated approval-bearing fields;
+worktree identity and scope precedence; side-effect-free rendering; approval
+revocation; expiry at every transition; and incomplete proof.
 
 ## Planning PR validation
 
