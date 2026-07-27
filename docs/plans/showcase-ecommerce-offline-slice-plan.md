@@ -96,17 +96,16 @@ source_mode     = OFFLINE_FIXTURE
 The workflow is non-reorderable:
 
 1. validate `OFFLINE_FIXTURE` as the permitted source mode;
-2. create the bounded packet with `packet_representation_version: "split-v1"`
-   as two linked canonical records: immutable `packet_content`, which is the
-   singular governed packet for the shared approval/proof contract and carries
-   the authoritative `record_id` and `content_digest`; and mutable
-   `packet_state`, which carries its own `state_record_id` and `state_digest`
-   plus approval, status, transition, failure, and proof-state fields and exact
-   `packet_content_record_id` and `packet_content_digest` back-references; embed
-   the `pre_retrieval_manifest`, context budgets, fixture/source binding,
+2. create immutable `pre_retrieval_packet_content` with
+   `packet_representation_version: "split-v1"` and
+   `packet_lifecycle_version: "two-stage-v1"`. This record authorizes retrieval
+   only and carries its own `record_id` and `content_digest`; embed the exact
+   request, `pre_retrieval_manifest`, context budgets, fixture/source binding,
    immutable selected-skill fields, expected worktree identity and clean-state
-   policy, approval requirement, expiry, and canonical manifest digest in
-   `packet_content`;
+   policy, literal allowed paths, tools and commands, approval requirement,
+   expiry, proof obligation, and stop condition. Also create mutable
+   `packet_state` with exact `pre_retrieval_record_id` and
+   `pre_retrieval_content_digest` references but no final packet binding yet;
 3. before reading any fixture record, validate manifest budgets, source binding,
    content digest, manifest-level deterministic freshness inputs
    (`max_freshness_age` and `checked_at`), immutable selected-skill identity,
@@ -136,7 +135,18 @@ The workflow is non-reorderable:
     `SCREENING_FAILED` when screening rejects retrieved content, and do not
     build canonical context, accept approval, or render a proposal in either
     case;
-12. build canonical context and bind it back to the validated packet;
+12. build canonical context, then create a new immutable final
+    `packet_content` execution record rather than mutating
+    `pre_retrieval_packet_content`. The final record must carry
+    `supersedes_record_id`, `pre_retrieval_record_id`, and
+    `pre_retrieval_content_digest`; copy every pre-retrieval authorization field
+    byte-for-byte; add only the validated retrieval measurements, screening
+    digest, canonical context digest, and final execution bindings; compute a
+    new final `record_id` and `content_digest`; revalidate the complete
+    supersession chain; and update `packet_state` with the final
+    `packet_content_record_id` and `packet_content_digest`. Any missing link,
+    mutation of a carried-forward field, or digest mismatch returns
+    `DIGEST_INVALID` before approval;
 13. resolve the current repository root, Git common directory, absolute worktree
     path and identity, branch, exact head, and canonical output of
     `git status --porcelain=v1 -z --untracked-files=all`;
@@ -146,23 +156,25 @@ The workflow is non-reorderable:
     `worktree_status_digest`, reject `main`, a detached or missing branch,
     another clone or worktree, a wrong branch or head, or any dirty-state entry,
     and return `WORKTREE_INVALID` before approval evaluation;
-15. validate successful screening bindings and affirmative approval fields in
+15. validate the immutable pre-retrieval-to-final supersession chain,
+    successful screening bindings, and affirmative approval fields in
     `packet_state`, including `human_approved: true`, reviewer identity,
-    disposition, `approved_packet_digest`, `approved_content_digest`, exact
+    disposition, `approved_packet_digest`, `approved_content_digest`,
+    `pre_retrieval_record_id`, `pre_retrieval_content_digest`, final
     `packet_content_record_id`, approved worktree identity, approved clean-state
     digest, and approved head;
-16. require `packet_representation_version: "split-v1"` and map the shared
-    contract's singular governed packet identity exclusively to
+16. require `packet_representation_version: "split-v1"` and
+    `packet_lifecycle_version: "two-stage-v1"`. Map the shared contract's
+    singular governed packet exclusively to the final
     `packet_content.record_id` and `packet_content.content_digest` in the
-    approval payload, `approved_content_digest`, and proof `packet_binding`;
-    require `packet_state.packet_content_record_id` and
-    `packet_state.packet_content_digest` to match that governed packet; retain
-    `packet_state.state_record_id` and `packet_state.state_digest` only as
-    supplemental mutable-state proof and never as a substitute packet identity;
-    and require `approved_packet_digest` to equal the current approval-payload
-    digest. A missing or ambiguous representation mapping returns
-    `PROOF_INCOMPLETE`; immutable-content mutation, cross-record drift, or proof
-    bound to the state record instead of the governed packet returns
+    approval payload, `approved_content_digest`, and proof `packet_binding`.
+    Proof must separately include `retrieval_authorization_binding` for
+    `pre_retrieval_packet_content.record_id` and its digest, plus the exact
+    supersession fields carried by the final packet. Require `packet_state` to
+    reference both records and digests. A missing lifecycle mapping or proof
+    chain returns `PROOF_INCOMPLETE`; carried-forward authorization drift returns
+    `DIGEST_INVALID`; approval or proof bound to the pre-retrieval record,
+    mutable state record, or wrong final record returns
     `PACKET_APPROVAL_MISMATCH` and invalidates approval;
 17. before changing status to `approved`, obtain trusted current time, validate
     that packet `expires_at` is present, timezone-aware, correctly bound, and not
@@ -296,40 +308,42 @@ Approval failure semantics are:
   mutable state reference, checkout, or proof bindings:
   `PACKET_APPROVAL_MISMATCH`.
 
-The packet uses the versioned compatibility mapping
-`packet_representation_version: "split-v1"`:
+The packet uses `packet_representation_version: "split-v1"` and
+`packet_lifecycle_version: "two-stage-v1"`:
 
-- immutable `packet_content` is the singular governed packet referenced by the
-  shared approval and proof contract. Its `record_id` maps to the shared
-  packet `record_id`, and its `content_digest` maps to the shared packet
-  `content_digest`, `approved_content_digest`, approval-payload packet binding,
+- immutable `pre_retrieval_packet_content` is the retrieval-authorization
+  record. It contains only values available and validated before retrieval and
+  carries its own `record_id` and RFC 8785 JCS SHA-256 `content_digest`;
+- after retrieval, observed-budget validation, freshness, screening, and context
+  construction, the worker creates a new immutable final `packet_content`
+  execution record. It must copy every pre-retrieval authorization field
+  unchanged and include `supersedes_record_id`, `pre_retrieval_record_id`, and
+  `pre_retrieval_content_digest`, then add only validated retrieval,
+  screening, context, and final execution bindings;
+- final `packet_content` is the singular governed packet referenced by the
+  shared approval and proof contract. Its `record_id` and `content_digest` map
+  to the shared packet identity, `approved_content_digest`, approval payload,
   and proof `packet_binding`;
-- `packet_content` contains every execution-authorizing value, including
-  objective, owner, source and manifest bindings, budgets, selected skill,
-  screening and context digests, repository and clean-worktree binding, literal
-  paths, allowed tools and commands, expiry, proof obligation, and stop
-  condition. Its `content_digest` is the RFC 8785 JCS SHA-256 digest of
-  `packet_content` with only its own `content_digest` field omitted;
-- mutable `packet_state` is a separate execution-state envelope with its own
-  `state_record_id` and `state_digest`. It contains approval,
-  authority/execution/retrieval status, transition timestamps, failures, and
-  proof-state fields and references the exact governed
-  `packet_content_record_id` and `packet_content_digest`; and
-- proof records the `packet_state` identity and digest as supplemental evidence,
-  but `packet_state` must never replace `packet_content` as the governed packet
-  identity.
+- mutable `packet_state` carries approval, status, transitions, failures, and
+  proof-state fields, its own `state_record_id` and `state_digest`, and exact
+  references to both the pre-retrieval and final immutable records; and
+- proof contains both `retrieval_authorization_binding` for the immutable
+  pre-retrieval record and `packet_binding` for the immutable final execution
+  record. The latter is the only record that may receive human approval.
 
-`approved_content_digest` snapshots immutable
+The original pre-retrieval record is never mutated. Before approval, the worker
+must revalidate that all carried-forward authorization fields are byte-identical
+and that both record IDs, digests, and supersession references form one chain.
+Missing or malformed lifecycle evidence returns `PROOF_INCOMPLETE`; modified
+carried-forward fields or invalid supersession digests return `DIGEST_INVALID`;
+approval or proof bound to the pre-retrieval record, mutable state record, or an
+unrelated final record returns `PACKET_APPROVAL_MISMATCH`.
+
+`approved_content_digest` snapshots final immutable
 `packet_content.content_digest` at approval time and is distinct from
 `approved_packet_digest`, which snapshots the canonical approval payload.
-`packet_state`, approval evidence, and proof must carry the same governed
-packet-content record ID and digest. Writing or clearing approval fields,
-changing status, recording transitions, or appending failure/proof evidence
-changes only `packet_state` and cannot change `approved_content_digest`.
-A missing representation version, an ambiguous mapping, or an incomplete proof
-mapping returns `PROOF_INCOMPLETE`. A content/state cross-binding mismatch or
-proof bound to `packet_state` instead of `packet_content` returns
-`PACKET_APPROVAL_MISMATCH`.
+Writing or clearing approval fields, changing status, recording transitions, or
+appending failure/proof evidence changes only `packet_state`.
 
 Any mutation to an execution-authorizing field requires a new immutable
 `packet_content` record or digest and immediately invalidates the prior
@@ -441,6 +455,8 @@ gate fails. The exact applicable failure code includes:
 - `FRESHNESS_EXCEEDED`;
 - `SCREENING_REQUIRED`;
 - `SCREENING_FAILED`;
+- `UNAUTHORIZED_TOOL`;
+- `UNAUTHORIZED_COMMAND`;
 - `WORKTREE_INVALID`;
 - `APPROVAL_REQUIRED`;
 - `APPROVAL_INVALID`;
@@ -474,13 +490,13 @@ These paths require a separately registered and approved implementation lane:
    injection screening with `SCREENING_REQUIRED` and `SCREENING_FAILED`,
    provenance, and UNKNOWN records.
 3. `src/showcase-ecommerce/approval.ts` — screening-to-packet binding;
-   checkout-to-immutable-packet repository root, Git common directory, absolute
-   worktree identity, non-`main` branch, exact-head and clean-status validation;
-   construction and validation of linked immutable `packet_content` and mutable
-   `packet_state`; `approved_packet_digest`, immutable
-   `packet_content_record_id`, and non-self-referential
-   `approved_content_digest`; trusted-time approval-transition expiry; and
-   approval acceptance only while unexpired.
+   checkout-to-packet repository root, Git common directory, absolute worktree
+   identity, non-`main` branch, exact-head and clean-status validation;
+   construction and validation of immutable pre-retrieval and final packet
+   records plus mutable `packet_state`; supersession-chain revalidation;
+   `approved_packet_digest`, final `packet_content_record_id`, and
+   non-self-referential `approved_content_digest`; trusted-time
+   approval-transition expiry; and approval acceptance only while unexpired.
 4. `src/showcase-ecommerce/proposal.ts` — pre-render and post-render
    identity/clean-state rechecks, trusted-time pre-render and render-completion
    expiry checks, deterministic SQL/YAML rendering only while unexpired, final
@@ -488,11 +504,12 @@ These paths require a separately registered and approved implementation lane:
    dirty-worktree, out-of-scope, or integrity-invalid proposal.
 5. `src/showcase-ecommerce/proof.ts` — canonical manifest-digest, budget, fixture,
    skill, screening, freshness-stage, worktree identity and clean-state digest;
-   the `split-v1` mapping of the shared singular packet `record_id`,
-   `content_digest`, approval payload, and proof `packet_binding` exclusively to
-   immutable `packet_content`; supplemental mutable `packet_state` identity and
-   digest evidence; packet-bound expiry; approval and execution transition
-   timestamps and checks; packet, context, and digest evidence.
+   `retrieval_authorization_binding` for immutable
+   `pre_retrieval_packet_content`; final `packet_binding` for immutable
+   `packet_content`; supersession-chain evidence; supplemental mutable
+   `packet_state` identity and digest evidence; authorized tool and command
+   evidence; packet-bound expiry; approval and execution transition timestamps
+   and checks; packet, context, and digest evidence.
 6. `src/cli.ts` — an explicitly selected showcase command path that preserves
    existing generic behavior.
 7. `fixtures/showcase-ecommerce/context.json` and
@@ -508,7 +525,9 @@ These paths require a separately registered and approved implementation lane:
    skill fields; missing manifest freshness inputs; missing, malformed, future,
    and over-age post-retrieval source timestamps; absent or pending screening
    evidence returning `SCREENING_REQUIRED`; sanitization or injection rejection
-   returning `SCREENING_FAILED`; wrong repository root, common directory,
+   returning `SCREENING_FAILED`; a tool outside the packet allowlist returning
+   `UNAUTHORIZED_TOOL`; a command outside the packet allowlist returning
+   `UNAUTHORIZED_COMMAND`; wrong repository root, common directory,
    worktree path or identity, `main`, detached or wrong branch, and
    head mismatch; staged, unstaged, or untracked changes before approval,
    before rendering, or after rendering before proof emission; renderer-created
@@ -516,10 +535,16 @@ These paths require a separately registered and approved implementation lane:
    absent approval, missing `human_approved`, and `human_approved: false`
    returning `APPROVAL_REQUIRED`; malformed approval; missing or invalid
    exact-head approval evidence returning `APPROVAL_HEAD_MISMATCH`; missing or
-   missing or unsupported `packet_representation_version`; proof packet binding
-   to `packet_state` instead of `packet_content`; cross-wired content/state
-   references; missing or mismatched immutable `packet_content_record_id` or
-   `approved_content_digest`; approval, status, transition, failure, or proof
+   unsupported representation or lifecycle version; mutation of the immutable
+   pre-retrieval record; missing or mismatched `supersedes_record_id`,
+   `pre_retrieval_record_id`, or `pre_retrieval_content_digest`; carried-forward
+   authorization drift returning `DIGEST_INVALID`; missing
+   `retrieval_authorization_binding` returning `PROOF_INCOMPLETE`; approval or
+   proof bound to the pre-retrieval or mutable state record instead of final
+   `packet_content` returning `PACKET_APPROVAL_MISMATCH`; cross-wired
+   content/state references; missing or mismatched final
+   `packet_content_record_id` or `approved_content_digest`; approval, status,
+   transition, failure, or proof
    mutation leaving the approved immutable snapshot unchanged; mutation of any
    immutable execution-authorizing content producing a new digest and
    `PACKET_APPROVAL_MISMATCH`; packet-state content-reference drift; valid
@@ -568,9 +593,12 @@ The one-file proof must include:
   freshness validation; deterministic `SCREENING_REQUIRED` and
   `SCREENING_FAILED` behavior; checkout identity and clean-state validation
   before approval, before rendering, and after rendering before proof emission;
-  the `split-v1` mapping of the singular governed
-  packet and proof binding to immutable `packet_content`; supplemental mutable
-  `packet_state` identity and digest evidence; separate approval-payload and
+  the `split-v1` / `two-stage-v1` immutable pre-retrieval-to-final supersession
+  chain; `retrieval_authorization_binding` to the pre-retrieval record; singular
+  governed `packet_binding` to final immutable `packet_content`; supplemental
+  mutable `packet_state` identity and digest evidence; deterministic
+  `UNAUTHORIZED_TOOL` and `UNAUTHORIZED_COMMAND` behavior; separate
+  approval-payload and
   immutable-content snapshots; trusted-time approval-transition expiry;
   continuous later execution-transition expiry; authority behavior; and output
   contracts reviewed;
@@ -620,9 +648,11 @@ allowlist. Its packet must require:
   retrieval, followed by attributable per-record `source_updated_at` and
   `checked_at - source_updated_at` validation after retrieval;
 - exact source and context digests; `packet_representation_version: "split-v1"`;
-  immutable `packet_content` as the singular governed packet; supplemental
-  mutable `packet_state` with exact content back-references; and approval,
-  screening, expiry, and proof digests;
+  `packet_lifecycle_version: "two-stage-v1"`; immutable
+  `pre_retrieval_packet_content`; immutable final `packet_content` as the
+  singular governed packet; exact supersession and retrieval-authorization
+  bindings; supplemental mutable `packet_state`; and approval, screening,
+  expiry, and proof digests;
 - canonical repository root, Git common directory, absolute registered worktree
   identity, a non-`main` approved branch, exact head, `untracked_policy:
   deny_all`, and zero staged, unstaged, or untracked entries validated before
@@ -637,6 +667,9 @@ allowlist. Its packet must require:
   `approved_at`, before rendering, at `executing_at`, at render completion, at
   `validated_at`, and immediately before final proof/emission, with every
   transition at or before packet `expires_at`;
+- literal packet allowlists for tools and commands, returning
+  `UNAUTHORIZED_TOOL` or `UNAUTHORIZED_COMMAND` before execution for any
+  non-member;
 - no DataHub or MG MCP writes, production migration, or deployment;
 - deterministic success and blocked outputs;
 - independent review of code, fixture provenance, skill supply chain, privacy,
@@ -670,9 +703,10 @@ This planning lane is done when:
 2. objective, judge value, reuse, canonical workflow, manifest integrity,
    deterministic budgets, manifest ordering, immutable skill, manifest-level and
    post-retrieval freshness stages, checkout identity and clean-state binding,
-   versioned singular-packet/proof compatibility, immutable
-   packet-content/mutable packet-state separation, deterministic screening
-   failure codes, non-self-referential approval snapshots, trusted-time
+   versioned singular-packet/proof compatibility, immutable pre-retrieval to
+   final-packet supersession, immutable packet-content/mutable packet-state
+   separation, deterministic screening and authorization failure codes,
+   non-self-referential approval snapshots, trusted-time
    approval-transition
    expiry, approval-before-render, continuous later execution-transition expiry,
    authority, outputs, future paths, validation, proof, blocked scope,
