@@ -121,7 +121,12 @@ The workflow is non-reorderable:
 7. resolve exactly one target dataset and its schema;
 8. resolve at most one downstream lineage path at depth one;
 9. resolve ownership, domain, tags, glossary, quality, and approved standards;
-10. after all required records are retrieved, require attributable
+10. after all required records are retrieved and before freshness, screening, or
+    context construction, compute and record the observed entity count, maximum
+    lineage depth, lineage-edge count, total record count, estimated token count,
+    and elapsed retrieval time from the canonical retrieved set; compare every
+    observation with the validated manifest budget and return `BUDGET_EXCEEDED`
+    for missing, malformed, or over-budget evidence; then require attributable
     `source_updated_at` for every safety-critical record, calculate
     `checked_at - source_updated_at`, and return `FRESHNESS_EXCEEDED` for missing,
     malformed, future-dated, or over-age evidence;
@@ -171,14 +176,22 @@ The workflow is non-reorderable:
     gate passes and it is at or before `expires_at`;
 19. render the bounded proposal, obtain trusted current time at rendering
     completion, and record `validated_at` only when it is at or before
-    `expires_at`; and
-20. immediately before emitting `proposal_ready` and final proof, revalidate the
+    `expires_at`;
+20. immediately after rendering and before proof or emission, re-resolve the
+    repository root, Git common directory, absolute worktree path and identity,
+    branch, exact head, and current
+    `git status --porcelain=v1 -z --untracked-files=all`; require the same
+    approved identity and zero staged, unstaged, or untracked entries; record
+    `post_render_worktree_status_digest` and require it to equal the approved and
+    pre-execution empty-status digest. Any identity or clean-state drift returns
+    `WORKTREE_INVALID`; a changed path outside packet scope returns
+    `SCOPE_VIOLATION`; in either case discard the proposal; and
+21. immediately before emitting `proposal_ready` and final proof, revalidate the
     approval-payload digest, immutable packet-content record identity and digest,
-    worktree identity, pre-execution clean status digest,
-    `approval_expiry_checked_at`, `approved_at`, every later
-    expiry-check time, `executing_at`, and `validated_at`; otherwise return the
-    exact failure code, discard the proposal, and emit the deterministic blocked
-    result.
+    current post-render worktree identity and clean-status digest,
+    `approval_expiry_checked_at`, `approved_at`, every later expiry-check time,
+    `executing_at`, and `validated_at`; otherwise return the exact failure code,
+    discard the proposal, and emit the deterministic blocked result.
 
 ### 3.1 Manifest integrity, bounded retrieval, and deterministic freshness
 
@@ -192,9 +205,15 @@ The offline fixture must be byte-stable, network-free, public-safe, and
 canonically ordered. Local fixture keys are not DataHub entity IDs. Contract
 budgets remain bounded to eight entities, lineage depth one, two lineage edges,
 sixteen total records, 4,000 estimated tokens, and a 30-second retrieval
-timeout. Missing, malformed, negative, or exceeded entity, lineage, edge,
-record, token, freshness-age, or timeout budgets stop retrieval with
-`BUDGET_EXCEEDED`.
+timeout.
+
+Budget declarations are validated before retrieval. The worker must also
+measure the observed entity count, maximum lineage depth, lineage-edge count,
+total record count, estimated token count, and elapsed retrieval time
+incrementally or immediately after retrieval. Missing, malformed, negative, or
+over-limit declared or observed evidence returns `BUDGET_EXCEEDED` before
+freshness validation, screening, context construction, approval, or rendering.
+Retrieved records from an over-budget result are discarded.
 
 The fixture contract currently records `max_freshness_age: UNKNOWN`; an
 implementation must not copy that value into an executable packet or manufacture
@@ -225,8 +244,8 @@ label or model-selected name cannot satisfy this gate.
 
 ### 3.3 Full worktree identity and clean-state binding
 
-Before approval is evaluated, and again immediately before rendering, the worker
-must resolve and canonicalize:
+Before approval is evaluated, immediately before rendering, and immediately
+after rendering before proof emission, the worker must resolve and canonicalize:
 
 - repository root;
 - Git common directory;
@@ -235,17 +254,22 @@ must resolve and canonicalize:
 - exact head SHA; and
 - `git status --porcelain=v1 -z --untracked-files=all`.
 
-The packet's explicit untracked-file policy is `deny_all`. Before approval and
-before rendering, the canonical status output must contain zero staged,
-unstaged, and untracked entries. The empty output is hashed as
-`worktree_status_digest`; packet, approval, and proof must carry the same digest.
-The worker must reject `main`, a detached or missing branch, another repository
-clone, another registered worktree, a wrong path, wrong branch, wrong head, any
-tracked modification, any staged change, or any untracked file. Any missing,
-ambiguous, dirty, or mismatched checkout-to-packet value returns
-`WORKTREE_INVALID`; `proposal` remains `null` and `executed_writes` remains
-empty. Matching only the head SHA is insufficient, and Gatekeeper validation
-does not replace these worker-local checks.
+The packet's explicit untracked-file policy is `deny_all`. At all three
+checkpoints, the canonical status output must contain zero staged, unstaged, and
+untracked entries. The empty output is hashed as `worktree_status_digest`; the
+post-render observation is separately recorded as
+`post_render_worktree_status_digest`. Packet, approval, and proof must bind the
+approved, pre-render, and post-render observations to the same empty status.
+
+The post-render checkpoint must execute a fresh Git identity and status query;
+it must not reuse the pre-execution observation. The worker must reject `main`,
+a detached or missing branch, another repository clone, another registered
+worktree, a wrong path, wrong branch, wrong head, any tracked modification, any
+staged change, or any untracked file. Any missing, ambiguous, dirty, or
+mismatched checkout-to-packet value returns `WORKTREE_INVALID`; a changed path
+outside packet scope returns `SCOPE_VIOLATION`; `proposal` remains `null` and
+`executed_writes` remains empty. Matching only the head SHA is insufficient, and
+Gatekeeper validation does not replace these worker-local checks.
 
 Approval evidence is not used to classify a checkout as valid or invalid.
 Approval-to-packet, approval-to-content, and approval-to-worktree mismatches are
@@ -457,10 +481,11 @@ These paths require a separately registered and approved implementation lane:
    `packet_content_record_id`, and non-self-referential
    `approved_content_digest`; trusted-time approval-transition expiry; and
    approval acceptance only while unexpired.
-4. `src/showcase-ecommerce/proposal.ts` — pre-render identity/clean-state recheck,
-   trusted-time pre-render and render-completion expiry checks, deterministic
-   SQL/YAML rendering only while unexpired, final validation before emission, or
-   a blocked result that discards any late or integrity-invalid proposal.
+4. `src/showcase-ecommerce/proposal.ts` — pre-render and post-render
+   identity/clean-state rechecks, trusted-time pre-render and render-completion
+   expiry checks, deterministic SQL/YAML rendering only while unexpired, final
+   validation before emission, or a blocked result that discards any late,
+   dirty-worktree, out-of-scope, or integrity-invalid proposal.
 5. `src/showcase-ecommerce/proof.ts` — canonical manifest-digest, budget, fixture,
    skill, screening, freshness-stage, worktree identity and clean-state digest;
    the `split-v1` mapping of the shared singular packet `record_id`,
@@ -476,15 +501,18 @@ These paths require a separately registered and approved implementation lane:
    implementation-lane allowlist are approved.
 8. `tests/showcase-ecommerce/*.test.ts` — deterministic success and blocked cases
    for missing, malformed, and mismatched canonical manifest digest returning
-   `DIGEST_INVALID`; every entity, lineage, edge, record, token, freshness-age,
-   and timeout budget excess returning `BUDGET_EXCEEDED`; missing or changed
+   `DIGEST_INVALID`; every declared or observed entity, lineage, edge, record,
+   token, freshness-age, and timeout budget excess returning
+   `BUDGET_EXCEEDED`, including post-retrieval count, token, and elapsed-time
+   overages; missing or changed
    skill fields; missing manifest freshness inputs; missing, malformed, future,
    and over-age post-retrieval source timestamps; absent or pending screening
    evidence returning `SCREENING_REQUIRED`; sanitization or injection rejection
    returning `SCREENING_FAILED`; wrong repository root, common directory,
    worktree path or identity, `main`, detached or wrong branch, and
-   head mismatch; staged, unstaged, or untracked changes before approval or
-   rendering; non-`deny_all` untracked policy; clean-state digest drift;
+   head mismatch; staged, unstaged, or untracked changes before approval,
+   before rendering, or after rendering before proof emission; renderer-created
+   files; post-render clean-state digest drift; non-`deny_all` untracked policy;
    absent approval, missing `human_approved`, and `human_approved: false`
    returning `APPROVAL_REQUIRED`; malformed approval; missing or invalid
    exact-head approval evidence returning `APPROVAL_HEAD_MISMATCH`; missing or
@@ -533,21 +561,25 @@ The one-file proof must include:
 - exact changed-path output, Gatekeeper result, and `git diff --check`;
 - package command results and exit codes;
 - non-empty artifact byte count;
-- canonical manifest verification and `DIGEST_INVALID`; deterministic budget
-  validation and `BUDGET_EXCEEDED`; manifest ordering; immutable-skill gate;
+- canonical manifest verification and `DIGEST_INVALID`; deterministic
+  pre-retrieval budget-declaration validation and post-retrieval observed-budget
+  measurement with `BUDGET_EXCEEDED`; manifest ordering; immutable-skill gate;
   manifest-level pre-retrieval freshness inputs; post-retrieval per-record
   freshness validation; deterministic `SCREENING_REQUIRED` and
   `SCREENING_FAILED` behavior; checkout identity and clean-state validation
-  before approval and rendering; the `split-v1` mapping of the singular governed
+  before approval, before rendering, and after rendering before proof emission;
+  the `split-v1` mapping of the singular governed
   packet and proof binding to immutable `packet_content`; supplemental mutable
   `packet_state` identity and digest evidence; separate approval-payload and
   immutable-content snapshots; trusted-time approval-transition expiry;
   continuous later execution-transition expiry; authority behavior; and output
   contracts reviewed;
 - deterministic blocked evidence for missing, malformed, and mismatched manifest
-  digest; every budget class; wrong repository root, common directory, worktree,
-  `main`, wrong or detached branch, head mismatch, staged/unstaged/untracked
-  entries, and clean-state digest mismatch;
+  digest; every declared and observed budget class, including post-retrieval
+  counts, tokens, and elapsed time; wrong repository root, common directory,
+  worktree, `main`, wrong or detached branch, head mismatch,
+  staged/unstaged/untracked entries at every checkpoint, renderer-created files,
+  and pre-render or post-render clean-state digest mismatch;
 - separate deterministic evidence for missing or pending screening returning
   `SCREENING_REQUIRED`, failed sanitization or injection screening returning
   `SCREENING_FAILED`, unsupported representation version, proof bound to the
@@ -580,8 +612,9 @@ allowlist. Its packet must require:
 - no network, credentials, private, or production metadata;
 - canonical manifest-digest verification with `DIGEST_INVALID` for missing,
   malformed, or mismatched evidence;
-- deterministic bounded retrieval with `BUDGET_EXCEEDED` for any exceeded
-  entity, lineage, edge, record, token, freshness-age, or timeout budget;
+- deterministic bounded retrieval with `BUDGET_EXCEEDED` for any invalid or
+  exceeded declared budget and for any post-retrieval observed entity, lineage,
+  edge, record, token, freshness-age, or elapsed-time budget;
 - immutable skill ID, source, version, license, and digest before retrieval;
 - concrete manifest `max_freshness_age` and deterministic `checked_at` before
   retrieval, followed by attributable per-record `source_updated_at` and
@@ -593,7 +626,8 @@ allowlist. Its packet must require:
 - canonical repository root, Git common directory, absolute registered worktree
   identity, a non-`main` approved branch, exact head, `untracked_policy:
   deny_all`, and zero staged, unstaged, or untracked entries validated before
-  approval and rendering;
+  approval, before rendering, and immediately after rendering before proof
+  emission, with fresh pre-render and post-render status digests;
 - affirmative `human_approved: true` approval separately bound to reviewer,
   disposition, `approved_packet_digest`, immutable
   `packet_content_record_id`, non-self-referential
