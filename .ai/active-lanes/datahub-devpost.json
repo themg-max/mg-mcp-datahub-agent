@@ -84,7 +84,7 @@
     },
     {
       "id": "datahub-showcase-ecommerce-offline-slice-plan",
-      "status": "PLANNING_ONLY",
+      "status": "APPROVED",
       "durable_branch": "plan/datahub-showcase-ecommerce-offline-slice",
       "owner": "datahub-offline-slice-planning-owner",
       "artifact": "docs/plans/showcase-ecommerce-offline-slice-plan.md",
