@@ -1,0 +1,184 @@
+schema_name: showcase_ecommerce_migration_scenario
+schema_version: "1.0"
+record_id: showcase-ecommerce-safe-customer-email-migration-v1
+status: planning_only
+source_mode_policy:
+  allowed:
+    - OFFLINE_FIXTURE
+    - ISOLATED_DATAHUB_READ_ONLY
+  blocked:
+    - PRIVATE_OR_PRODUCTION_DATAHUB
+scenario:
+  key: safe-customer-email-migration
+  logical_dataset: showcase-ecommerce
+  objective: safe dbt schema migration
+  request: Propose a safe customer-email mapping for one verified downstream dbt model.
+  not_authorized:
+    - production migration
+    - DataHub write
+    - MG MCP write
+    - deployment
+    - merge
+selection:
+  exact_match:
+    dataset_key: showcase-ecommerce
+    scenario_key: safe-customer-email-migration
+  deterministic_order:
+    - validate_source_mode
+    - validate_pre_retrieval_manifest
+    - resolve_dataset
+    - resolve_schema
+    - resolve_bounded_lineage
+    - resolve_ownership
+    - resolve_domain_tags_glossary
+    - resolve_quality_and_standards
+    - screen_content
+    - build_context
+    - build_packet
+    - render_proposal_or_block
+  reject_if:
+    - dataset key does not match exactly
+    - source mode is not allowed
+    - more than one target dataset is selected
+    - lineage exceeds declared budget
+    - safety-critical records conflict
+    - sanitization or injection screening fails
+    - a required source value is guessed
+    - a tool or command is outside the packet allowlist
+  block_if_unknown:
+    - target dataset URN
+    - customer email source field
+    - downstream relation
+    - downstream model
+    - accountable owner
+    - applicable quality assertion
+read_only_discovery:
+  exact_query: UNKNOWN
+  query_tool: UNKNOWN
+  query_must_be_read_only: true
+  required_evidence:
+    schema:
+      dataset_urn: UNKNOWN
+      field_name: UNKNOWN
+      field_type: UNKNOWN
+      nullable: UNKNOWN
+      description: UNKNOWN
+      schema_version: UNKNOWN
+    lineage:
+      upstream_entities: UNKNOWN
+      downstream_entities: UNKNOWN
+      direction: UNKNOWN
+      depth: 1
+    ownership:
+      owner: UNKNOWN
+      ownership_type: UNKNOWN
+    domain:
+      identifier: UNKNOWN
+      name: UNKNOWN
+    tags:
+      values: UNKNOWN
+      governance_meaning: UNKNOWN
+    glossary:
+      term_identifier: UNKNOWN
+      definition: UNKNOWN
+    quality:
+      assertion_identifier: UNKNOWN
+      rule: UNKNOWN
+      severity: UNKNOWN
+    approved_standards: UNKNOWN
+  unresolved_source_ids_are_blocking: true
+metadata_to_code:
+  verified_customer_email_field:
+    source: schema.field_name
+    output_effect: replace_placeholder_in_sql
+    unknown_effect: block
+  verified_downstream_relation:
+    source: lineage.downstream_entities
+    output_effect: replace_placeholder_in_sql
+    unknown_effect: block
+  verified_downstream_model:
+    source: lineage.downstream_entities
+    output_effect: replace_placeholder_in_yaml
+    unknown_effect: block
+  verified_glossary_meaning:
+    source: glossary.definition
+    output_effect: populate_model_description
+    unknown_effect: block
+  verified_quality_assertion:
+    source: quality.assertion_identifier
+    output_effect: populate_dbt_test
+    unknown_effect: block
+expected_proposal_shape:
+  sql_template: |
+    select
+      <verified_customer_email_field> as customer_email
+    from <verified_downstream_relation>
+  schema_yaml_template: |
+    version: 2
+    models:
+      - name: <verified_downstream_model>
+        columns:
+          - name: customer_email
+            description: "<verified glossary meaning>"
+            data_tests:
+              - <verified_quality_assertion>
+  template_values_are:
+    - non-executable placeholders
+    - not DataHub entity IDs
+    - not production migration content
+  blocked_render_when: any safety-critical placeholder is UNKNOWN or conflicting
+blocked_render:
+  status: blocked
+  failure_code: PROOF_INCOMPLETE
+  message: Safety-critical metadata is unresolved; do not guess SQL or YAML.
+  next_check: Repeat bounded isolated read-only discovery or use an approved fixture record.
+work_packet:
+  objective: safe dbt schema migration
+  writable_paths:
+    - docs/plans/showcase-ecommerce-fixture-contract-plan.md
+    - docs/fixtures/showcase-ecommerce/fixture-manifest.yaml
+    - docs/fixtures/showcase-ecommerce/scenario-safe-customer-email-migration.yaml
+    - docs/fixtures/showcase-ecommerce/expected-context-summary.yaml
+    - docs/fixtures/showcase-ecommerce/expected-proof-summary.yaml
+  authorized_tools: UNKNOWN
+  denied_tools:
+    - DataHub write tools
+    - MG MCP write tools
+    - deployment and IAM tools
+  allowed_commands:
+    - python3 -m json.tool .ai/active-lanes/datahub-devpost.json
+    - |
+      python3 - <<'PY'
+      from pathlib import Path
+      import yaml
+
+      class StrictLoader(yaml.SafeLoader):
+          pass
+
+      def construct_mapping(loader, node, deep=False):
+          result = {}
+          for key_node, value_node in node.value:
+              key = loader.construct_object(key_node, deep=deep)
+              if key in result:
+                  raise ValueError(f"duplicate key: {key}")
+              result[key] = loader.construct_object(value_node, deep=deep)
+          return result
+
+      StrictLoader.add_constructor(
+          yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+          construct_mapping,
+      )
+      for path in sorted(Path("docs/fixtures/showcase-ecommerce").glob("*.yaml")):
+          value = yaml.load(path.read_text(encoding="utf-8"), Loader=StrictLoader)
+          if not isinstance(value, dict):
+              raise ValueError(f"{path}: top-level YAML must be a mapping")
+      PY
+    - ./scripts/check_lane_state.sh inspect
+    - ./scripts/check_lane_state.sh mutation
+    - git diff --check
+  stop_condition: stop at proof return or any safety-critical UNKNOWN or conflict
+forbidden_operation:
+  symbolic_request: DataHub write tool
+  must_contact_write_endpoint: false
+  expected_failure_code: FORBIDDEN_OPERATION_ATTEMPTED
+  expected_result: fail_closed

@@ -1,0 +1,129 @@
+schema_name: showcase_ecommerce_fixture_manifest
+schema_version: "1.0"
+record_id: showcase-ecommerce-fixture-manifest-v1
+status: planning_only
+owner: datahub-fixture-planning-owner
+repository: themg-max/mg-mcp-datahub-agent
+license:
+  identifier: Apache-2.0
+  source_path: LICENSE
+  official_contest_datapack_license: UNKNOWN
+provenance:
+  official_datapack:
+    status: UNKNOWN
+    source_record_id: UNKNOWN
+    release: UNKNOWN
+    public_safety_review: UNKNOWN
+  fallback:
+    kind: synthetic_or_sanitized_repository_fixture
+    source_path: fixtures/datahub-context.json
+    source_commit: UNKNOWN
+    represents_showcase_ecommerce: false
+    note: Existing fixture is not silently reclassified as the official datapack.
+source_modes:
+  allowed:
+    - OFFLINE_FIXTURE
+    - ISOLATED_DATAHUB_READ_ONLY
+  blocked:
+    - PRIVATE_OR_PRODUCTION_DATAHUB
+  default: OFFLINE_FIXTURE
+offline_fixture:
+  deterministic: true
+  network_required: false
+  local_record_keys:
+    - dataset_target
+    - downstream_consumer
+    - owner_record
+    - domain_record
+    - tag_record
+    - glossary_record
+    - quality_assertion_record
+  executable_entity_urns:
+    dataset_target: UNKNOWN
+    downstream_consumer: UNKNOWN
+    owner_record: UNKNOWN
+    domain_record: UNKNOWN
+    tag_record: UNKNOWN
+    glossary_record: UNKNOWN
+    quality_assertion_record: UNKNOWN
+  field_bindings:
+    customer_email_source_field: UNKNOWN
+    downstream_relation: UNKNOWN
+    downstream_model: UNKNOWN
+  expected_context_state: partial_with_blocking_unknowns
+isolated_datahub_read_only:
+  connection:
+    server_id: UNKNOWN
+    environment_id: UNKNOWN
+    endpoint_digest: UNKNOWN
+    principal_identity: UNKNOWN
+    access_mode: ISOLATED_DATAHUB_READ_ONLY
+  tool_inventory:
+    server_id: UNKNOWN
+    protocol_version: UNKNOWN
+    tools_digest: UNKNOWN
+    approved_read_tools: UNKNOWN
+    denied_write_tools:
+      - DataHub write tools
+      - MG MCP write tools
+  exact_dataset_urn: UNKNOWN
+  exact_related_entity_urns: UNKNOWN
+  expected_context_state: unknown_until_read_only_discovery
+scenario:
+  key: safe-customer-email-migration
+  logical_dataset: showcase-ecommerce
+  objective: safe dbt schema migration
+  requested_change: verify and propose a customer-email field mapping for a downstream model
+  target_field_semantics: customer email
+  source_field_name: UNKNOWN
+  source_type: UNKNOWN
+  nullability: UNKNOWN
+  selection_requires:
+    - exact logical dataset match
+    - one bounded downstream lineage path
+    - attributable owner
+    - attributable domain
+    - attributable governance tags
+    - attributable glossary meaning
+    - attributable quality assertion
+  safety_critical_unknowns:
+    - dataset_target
+    - downstream_consumer
+    - customer_email_source_field
+    - downstream_relation
+    - owner_record
+    - quality_assertion_record
+budgets:
+  max_entities: 8
+  max_lineage_depth: 1
+  max_lineage_edges: 2
+  max_total_records: 16
+  max_token_estimate: 4000
+  max_freshness_age: UNKNOWN
+  retrieval_timeout: 30s
+sanitization:
+  instruction_trust: data_only
+  sanitization_status: required
+  injection_scan_status: required
+  quarantined_records: []
+public_safety:
+  credentials_allowed: false
+  private_urls_allowed: false
+  production_identifiers_allowed: false
+  personal_customer_values_allowed: false
+  synthetic_or_sanitized_records_only: true
+allowed_planning_paths:
+  - docs/plans/showcase-ecommerce-fixture-contract-plan.md
+  - docs/fixtures/showcase-ecommerce/fixture-manifest.yaml
+  - docs/fixtures/showcase-ecommerce/scenario-safe-customer-email-migration.yaml
+  - docs/fixtures/showcase-ecommerce/expected-context-summary.yaml
+  - docs/fixtures/showcase-ecommerce/expected-proof-summary.yaml
+blocked_operations:
+  - runtime source changes
+  - adapter or generator changes
+  - package or dependency changes
+  - workflow or deployment changes
+  - IAM, credential, or secret changes
+  - DataHub writes
+  - MG MCP writes
+  - merge
