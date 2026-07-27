@@ -19,12 +19,10 @@
     },
     {
       "id": "devpost-repo-governance",
-      "status": "APPROVED",
-      "durable_branch": "chore/devpost-repo-governance",
-      "managed_workspace_branch": "work",
-      "owner": "governance-implementation-owner",
-      "artifact": "repository-native Gatekeeper governance files",
-      "note": "APPROVED authorizes this bounded implementation lane but does not make the proposed governance profile authoritative before merge."
+      "status": "VERIFIED",
+      "pr": 3,
+      "merge_commit": "c9d9d851df3b1d523e9bc84f57f1aa676673fc8f",
+      "artifact": "repository-native Gatekeeper governance files"
     },
     {
       "id": "fixture-demo-preservation",
@@ -38,6 +36,45 @@
       "status": "PLANNING_ONLY",
       "branch": "feat/datahub-fixture-demo-mainline",
       "base": "1e5e7a19bfff280d351373ae43c41cefeaab56f9"
+    },
+    {
+      "id": "datahub-mg-mcp-skill-bridge-architecture",
+      "status": "APPROVED",
+      "durable_branch": "docs/datahub-mg-mcp-skill-bridge-architecture",
+      "owner": "bridge-architecture-owner",
+      "artifact": "docs/datahub-mg-mcp-skill-bridge-architecture.md",
+      "note": "Architecture-only lane for the read-only DataHub MCP to MG MCP skill-retrieval bridge. No implementation, deployment, credential, DataHub-write, or MG MCP-write work is authorized.",
+      "allowed_paths": [
+        ".ai/active-lanes/datahub-devpost.json",
+        "docs/datahub-mg-mcp-skill-bridge-architecture.md"
+      ]
+    },
+    {
+      "id": "gatekeeper-lane-scoped-allowlists",
+      "status": "APPROVED",
+      "durable_branch": "fix/gatekeeper-lane-scoped-allowlists",
+      "owner": "governance-implementation-owner",
+      "allowed_paths": [
+        ".ai/active-lanes/README.md",
+        ".ai/active-lanes/datahub-devpost.json",
+        ".github/skills/gatekeeper/SKILL.md",
+        ".github/skills/gatekeeper/references/session-start.md",
+        ".github/skills/gatekeeper/references/session-stop.md",
+        "scripts/check_lane_state.sh"
+      ],
+      "artifact": "lane-scoped Gatekeeper path enforcement",
+      "note": "Bounded compatibility repair enabling exact per-lane path enforcement. No implementation, deployment, IAM, secret, DataHub-write, or MG MCP-write work is authorized."
+    },
+    {
+      "id": "lane-registry-intake",
+      "status": "APPROVED",
+      "durable_branch": "chore/lane-registry-intake",
+      "owner": "governance-maintainer",
+      "allowed_paths": [
+        ".ai/active-lanes/datahub-devpost.json"
+      ],
+      "artifact": "bounded active-lane registration proposal",
+      "note": "Reusable registry-only intake lane. One active intake PR at a time. This lane may propose future lane authority but may not modify implementation, documentation, runtime, deployment, credential, IAM, DataHub, or MG MCP surfaces."
     }
   ]
 }
