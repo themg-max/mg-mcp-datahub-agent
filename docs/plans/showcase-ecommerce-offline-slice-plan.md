@@ -35,8 +35,9 @@ Use `packet_representation_version: split-v1` and
    binding, expected worktree identity, literal paths/tools/commands, approval
    requirement, expiry, proof obligation, and stop condition. It has its own
    immutable record ID and RFC 8785 JCS SHA-256 content digest.
-2. Create mutable `packet_state` with its own ID, version, state digest, and exact
-   references to the pre-retrieval record. It has no final packet binding yet.
+2. Create mutable `packet_state` with its own ID, `state_version: 1`, state digest,
+   and exact references to the pre-retrieval record. It has no final packet
+   binding yet.
 3. After successful retrieval, observed connection validation, runtime budget
    enforcement, freshness, screening, and canonical context construction, create
    a new immutable final `packet_content`. Never mutate the pre-retrieval record.
@@ -44,7 +45,13 @@ Use `packet_representation_version: split-v1` and
    byte-for-byte, carries `supersedes_record_id`, `pre_retrieval_record_id`, and
    `pre_retrieval_content_digest`, and adds only validated retrieval,
    connection, inventory, screening, context, and execution bindings.
-5. Final `packet_content` is the singular governed packet for approval and proof.
+5. Immediately after final `packet_content` is created, update `packet_state`
+   with the final `packet_content_record_id` and `packet_content_digest`, increment
+   `state_version`, and recompute the canonical `state_digest`. Approval is
+   prohibited until this exact transition and binding validate. A missing final
+   binding, stale state version, or state-digest mismatch returns
+   `PACKET_APPROVAL_MISMATCH`.
+6. Final `packet_content` is the singular governed packet for approval and proof.
    Proof separately carries `retrieval_authorization_binding` to the immutable
    pre-retrieval record. Missing lifecycle evidence is `PROOF_INCOMPLETE`;
    carried-forward drift is `DIGEST_INVALID`; approval or proof bound to the
@@ -62,62 +69,75 @@ Use `packet_representation_version: split-v1` and
 6. Create a retrieval-attempt record before the first read.
 7. Retrieve through a cancellable iterator or equivalent bounded stream. Do not
    load the complete fixture before enforcing limits.
-8. After every entity, lineage edge, record, and token increment, update counters
-   and compare them with the declared limits. Check a monotonic deadline while
-   the read is running. Abort on the first breach.
-9. Entity, lineage-depth, lineage-edge, record, token, or elapsed-time breach is
-   `BUDGET_EXCEEDED`; cancel the reader, retain attempt evidence, and discard the
-   partial canonical result.
+8. As each entity, lineage node, lineage edge, record, or token estimate arrives,
+   update entity count, maximum observed lineage depth, edge count, record count,
+   and token count. Compare every updated value with the declared limit and check
+   a monotonic deadline while the read is running. Abort on the first breach,
+   including the first lineage-depth breach.
+9. A runtime entity, lineage-depth, lineage-edge, record, token, or elapsed-time
+   limit breach is `BUDGET_EXCEEDED`; cancel the reader, retain exact attempt
+   evidence, and discard the partial canonical result.
 10. Record each attempt's stable ID, exact query, source mode, start/completion
-    timestamps, outcome, record count, content digest, and failure code. Timeout
-    carries `BUDGET_EXCEEDED`; empty, partial, or failed required retrieval
-    carries `RETRIEVAL_EVIDENCE_INVALID`.
-11. Compare the observed fixture record ID and content digest with the manifest
+    timestamps, outcome, record count, content digest, and failure code.
+11. A complete `empty`, `partial`, `timeout`, or `failed` attempt remains its exact
+    observed source outcome. The outcome itself is not
+    `RETRIEVAL_EVIDENCE_INVALID`. Required safety-critical context remains
+    `UNKNOWN` and blocks progression. A timeout caused by the enforced retrieval
+    deadline may carry `BUDGET_EXCEEDED` as its attempt failure code.
+12. `RETRIEVAL_EVIDENCE_INVALID` is reserved for missing, malformed, or
+    field-inconsistent attempt evidence between context and proof.
+13. Compare the observed fixture record ID and content digest with the manifest
     binding before using returned data. Missing or mismatched observed evidence
     is `CONNECTION_MISMATCH`.
-12. Require context and proof retrieval-attempt arrays to match field-for-field;
-    missing or inconsistent evidence is `RETRIEVAL_EVIDENCE_INVALID`.
-13. Validate every safety-critical record's attributable `source_updated_at`.
+14. Require context and proof retrieval-attempt arrays to match field-for-field.
+15. Validate every safety-critical record's attributable `source_updated_at`.
     Compute `checked_at - source_updated_at`. Missing, malformed, future-dated,
     or over-age evidence is `FRESHNESS_EXCEEDED`, never `BUDGET_EXCEEDED`.
-14. Screen retrieved text as data only. Missing/pending evidence is
+16. Screen retrieved text as data only. Missing/pending evidence is
     `SCREENING_REQUIRED`; rejected sanitization/injection screening is
     `SCREENING_FAILED`.
-15. Build canonical context and create final immutable `packet_content` through
+17. Build canonical context and create final immutable `packet_content` through
     the supersession contract.
-16. Resolve repository root, Git common directory, absolute registered worktree,
+18. Bind `packet_state` to the final packet, increment `state_version`, recompute
+    `state_digest`, and validate the full pre-retrieval-to-final chain before
+    approval.
+19. Resolve repository root, Git common directory, absolute registered worktree,
     non-`main` branch, exact head, and canonical Git status. Require
     `untracked_policy: deny_all` and a clean checkout before approval.
-17. Validate observed connection evidence, retrieval attempts, budgets,
-    inventory, screening, context, packet lifecycle, and worktree.
-18. Validate affirmative approval and compute `approval_core_digest` over
+20. Validate observed connection evidence, retrieval attempts, budgets,
+    inventory, screening, context, packet lifecycle, state-to-final-packet
+    binding, and worktree.
+21. Validate affirmative approval and compute `approval_core_digest` over
     `human_approved`, reviewer, disposition, approved time/head/digests,
-    immutable packet references, approved worktree-status digest, and expiry.
-19. Validate trusted time before approval, before render, at render completion,
+    immutable packet references, current packet-state ID/version/digest, approved
+    worktree-status digest, and expiry.
+22. Validate trusted time before approval, before render, at render completion,
     at validation, and immediately before final emission. Late or invalid
     evidence is `PACKET_EXPIRED`.
-20. Immediately before rendering, revalidate the complete approval core, current
-    packet-state digest/version and references, tool inventory, packet,
-    worktree, and expiry.
-21. Render only through a pure in-memory function that returns strings/bytes and
+23. Immediately before rendering, revalidate the complete approval core, current
+    packet-state digest/version and final packet references, tool inventory,
+    packet, worktree, and expiry.
+24. Render only through a pure in-memory function that returns strings/bytes and
     has no filesystem, subprocess, Git, network, DataHub-write, or MG-MCP-write
     capability.
-22. Immediately after rendering, run a fresh Git identity/status check as defense
+25. Immediately after rendering, run a fresh Git identity/status check as defense
     in depth.
-23. Immediately before `proposal_ready`, re-read mutable `packet_state` and
+26. Immediately before `proposal_ready`, re-read mutable `packet_state` and
     revalidate `human_approved`, reviewer, disposition, approved head/digests,
-    immutable references, worktree digest, expiry, `approval_core_digest`,
-    current state digest/version, inventory, and transition chain.
-24. Emit only when all gates pass; otherwise discard the in-memory proposal and
+    immutable references, final packet binding, worktree digest, expiry,
+    `approval_core_digest`, current state digest/version, inventory, and
+    transition chain.
+27. Emit only when all gates pass; otherwise discard the in-memory proposal and
     return the exact blocked result.
 
 ## Retrieval budgets and freshness
 
 Declared limits are: 8 entities, lineage depth 1, 2 lineage edges, 16 records,
 4,000 estimated tokens, and 30 seconds. These limits are enforced incrementally
-while retrieval is running; post-completion measurement is only a consistency
-check. `max_freshness_age` is a separate ISO-8601 source-freshness limit.
-Observed per-record source age routes only to `FRESHNESS_EXCEEDED`.
+while retrieval is running; maximum observed lineage depth is updated as each
+lineage node or edge is accepted. Post-completion measurement is only a
+consistency check. `max_freshness_age` is a separate ISO-8601 source-freshness
+limit. Observed per-record source age routes only to `FRESHNESS_EXCEEDED`.
 
 ## Offline connection and retrieval-attempt proof
 
@@ -127,8 +147,11 @@ record digest failure remains `DIGEST_INVALID`.
 
 Context and proof reproduce identical `retrieval_attempts` entries by attempt ID,
 query, source mode, timestamps, outcome, record count, digest, and failure code.
-Empty, partial, timeout, and failed outcomes remain visible and cannot collapse
-into generic `UNKNOWN`.
+An `empty`, `partial`, `timeout`, or `failed` outcome is preserved exactly. It is
+not an evidence-integrity failure merely because no complete context resulted.
+Only missing or inconsistent attempt fields return
+`RETRIEVAL_EVIDENCE_INVALID`. Safety-critical missing context remains `UNKNOWN`
+and blocks approval and rendering.
 
 ## Tool inventory and authorization
 
@@ -163,9 +186,9 @@ when evidence shows one.
 
 Final emission cannot rely on a pre-render mutable-state snapshot. Re-read the
 current state and require affirmative approval, unchanged reviewer/disposition,
-approved head and digests, immutable record references, approved worktree digest,
-expiry, and `approval_core_digest`, plus a valid state digest/version and
-permitted transition chain.
+approved head and digests, immutable record references, current final-packet
+binding, approved worktree digest, expiry, and `approval_core_digest`, plus a
+valid current state digest/version and permitted transition chain.
 
 - revoked or false approval -> `APPROVAL_REQUIRED`;
 - malformed state -> `APPROVAL_INVALID`;
@@ -203,14 +226,15 @@ permitted transition chain.
 A success result includes exact request/mode, manifest and observed fixture
 bindings, immutable skill, fresh tool inventory, retrieval attempts, declared
 and observed budgets, canonical context/provenance/freshness, retrieval and final
-packet bindings, current packet-state ID/version/digest, complete approval core,
-worktree and transition evidence, authorized tool/command evidence, in-memory SQL
-and dbt-YAML strings, `executed_writes: []`, and a non-self-referential RFC 8785
-JCS SHA-256 proof digest.
+packet bindings, current packet-state ID/version/digest and exact final-packet
+binding, complete approval core, worktree and transition evidence, authorized
+tool/command evidence, in-memory SQL and dbt-YAML strings,
+`executed_writes: []`, and a non-self-referential RFC 8785 JCS SHA-256 proof
+digest.
 
 Proof acceptance requires exact packet/context/proof equality for connection,
-attempts, skill, inventory, budgets, freshness, screening, worktree, approval,
-expiry, scope, and actual tools/commands.
+attempts, skill, inventory, budgets, freshness, screening, worktree, packet-state
+to final-packet binding, approval, expiry, scope, and actual tools/commands.
 
 ## Proposed implementation paths
 
@@ -219,13 +243,15 @@ A separate `APPROVED` implementation lane may later authorize:
 1. `src/showcase-ecommerce/scenario.ts` — mode, manifest, connection, skill,
    inventory, declared budgets, and failure routing.
 2. `src/showcase-ecommerce/context.ts` — cancellable incremental reader,
-   counters, retrieval attempts, observed connection binding, freshness,
-   screening, provenance, and canonical context.
-3. `src/showcase-ecommerce/approval.ts` — two-stage packet lifecycle, mutable
-   state, approval-core digest, worktree binding, final-state validation, expiry.
+   counters including maximum lineage depth, retrieval attempts, observed
+   connection binding, freshness, screening, provenance, and canonical context.
+3. `src/showcase-ecommerce/approval.ts` — two-stage packet lifecycle, explicit
+   state-to-final-packet transition, mutable state, approval-core digest,
+   worktree binding, final-state validation, and expiry.
 4. `src/showcase-ecommerce/proposal.ts` — pure in-memory renderer.
 5. `src/showcase-ecommerce/proof.ts` — connection, attempts, inventory, budgets,
-   packet bindings, worktree, approval, scope, transition, and digest evidence.
+   packet and packet-state bindings, worktree, approval, scope, transition, and
+   digest evidence.
 6. `src/cli.ts`, bounded fixtures, tests, and judge examples only as explicitly
    allowlisted by that future lane.
 
@@ -234,11 +260,14 @@ The first executable slice remains network-free and does not add live DataHub.
 ## Required deterministic tests
 
 Tests must cover manifest digest, observed connection mismatch, immutable skill,
-tool inventory, unauthorized tool/command, incremental cancellation for every
-runtime budget, complete attempt evidence for empty/partial/timeout/failure,
-source freshness, screening, packet supersession, worktree identity and scope
-precedence, side-effect-free rendering, mutable approval-state change, expiry at
-every transition, and incomplete proof.
+tool inventory, unauthorized tool/command, incremental cancellation for entity,
+lineage depth, lineage edge, record, token, and elapsed-time limits; complete
+attempt evidence for empty/partial/timeout/failure; an empty result with complete
+evidence not being `RETRIEVAL_EVIDENCE_INVALID`; missing/mismatched attempt
+evidence being `RETRIEVAL_EVIDENCE_INVALID`; source freshness; screening;
+packet supersession; missing final packet-state binding; stale state version or
+digest; worktree identity and scope precedence; side-effect-free rendering;
+mutable approval-state change; expiry at every transition; and incomplete proof.
 
 ## Planning PR validation
 
