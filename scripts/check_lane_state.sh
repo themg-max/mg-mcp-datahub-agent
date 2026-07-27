@@ -498,8 +498,8 @@ validate_bootstrap_transition() {
     exit 15
   fi
   validate_bootstrap_scope
-  validate_candidate_registry
   validate_bootstrap_candidate_contract
+  validate_candidate_registry
   printf '%s\n' 'result=PASS (bootstrap transition evidence complete; no merge performed)'
   exit 0
 }
@@ -675,7 +675,10 @@ if [ "$mode" = "mutation" ]; then
   exit 0
 fi
 
-if [ "$mode" = "merge" ] && [ "${GATEKEEPER_TRANSITION:-}" = "BOOTSTRAP_TRANSITION" ]; then
+if [ "$mode" = "merge" ] &&
+   { [ -n "${GATEKEEPER_TRANSITION:-}" ] ||
+     [ -n "${GATEKEEPER_BOOTSTRAP_PR:-}" ] ||
+     [ -n "${GATEKEEPER_BOOTSTRAP_BASE:-}" ]; }; then
   validate_bootstrap_transition
 fi
 
