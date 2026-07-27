@@ -34,15 +34,10 @@ retrieval_attempts:
   - attempt_id: offline-fixture-load-v1
     query: load approved local fixture manifest
     source_mode: OFFLINE_FIXTURE
-    outcome: expected
-    records_returned: 0
-    content_digest: UNKNOWN
-    failure_code: null
-  - attempt_id: live-discovery-attempt-UNKNOWN
-    query: UNKNOWN
-    source_mode: ISOLATED_DATAHUB_READ_ONLY
-    outcome: not_run
-    records_returned: 0
+    started_at: 2026-07-27T15:23:00Z
+    completed_at: 2026-07-27T15:23:01Z
+    outcome: success
+    records_returned: 1
     content_digest: null
     failure_code: null
 schema:
