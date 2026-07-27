@@ -78,11 +78,46 @@ unknowns:
     source: MG MCP
     blocking: true
     next_check: Bind an approved immutable skill in a separate implementation plan.
+retrieval_attempts:
+  - attempt_id: offline-fixture-load-v1
+    query: load approved local fixture manifest
+    source_mode: OFFLINE_FIXTURE
+    started_at: 2026-07-27T15:23:00Z
+    completed_at: 2026-07-27T15:23:01Z
+    outcome: success
+    records_returned: 1
+    content_digest: null
+    failure_code: null
 execution_evidence:
   tools_executed: []
   commands_executed:
     - python3 -m json.tool .ai/active-lanes/datahub-devpost.json
-    - strict YAML contract validation
+    - |
+      python3 - <<'PY'
+      from pathlib import Path
+      import yaml
+
+      class StrictLoader(yaml.SafeLoader):
+          pass
+
+      def construct_mapping(loader, node, deep=False):
+          result = {}
+          for key_node, value_node in node.value:
+              key = loader.construct_object(key_node, deep=deep)
+              if key in result:
+                  raise ValueError(f"duplicate key: {key}")
+              result[key] = loader.construct_object(value_node, deep=deep)
+          return result
+
+      StrictLoader.add_constructor(
+          yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+          construct_mapping,
+      )
+      for path in sorted(Path("docs/fixtures/showcase-ecommerce").glob("*.yaml")):
+          value = yaml.load(path.read_text(encoding="utf-8"), Loader=StrictLoader)
+          if not isinstance(value, dict):
+              raise ValueError(f"{path}: top-level YAML must be a mapping")
+      PY
     - ./scripts/check_lane_state.sh inspect
     - ./scripts/check_lane_state.sh mutation
     - git diff --check
