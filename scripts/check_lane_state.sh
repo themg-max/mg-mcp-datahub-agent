@@ -62,10 +62,14 @@ authority_ref="NONE"
 authority_commit="NONE"
 authority_error=""
 authority_registry=""
+candidate_registry=""
 
 cleanup_authority_registry() {
   if [ -n "$authority_registry" ]; then
     rm -f "$authority_registry"
+  fi
+  if [ -n "$candidate_registry" ]; then
+    rm -f "$candidate_registry"
   fi
 }
 trap cleanup_authority_registry EXIT
@@ -234,6 +238,92 @@ validate_committed_scope() {
     fi
   done
   return 0
+}
+
+validate_candidate_registry() {
+  candidate_registry="$(mktemp "${TMPDIR:-/tmp}/gatekeeper-candidate.XXXXXX")" || {
+    printf '%s\n' 'ERROR unable to create candidate registry buffer' >&2
+    exit 15
+  }
+  if ! git -C "$root" show "HEAD:$registry_path" >"$candidate_registry" 2>/dev/null; then
+    rm -f "$candidate_registry"
+    candidate_registry=""
+    printf '%s\n' 'ERROR unable to retrieve candidate active-lane registry at HEAD' >&2
+    exit 15
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    rm -f "$candidate_registry"
+    candidate_registry=""
+    printf '%s\n' 'ERROR required dependency missing: node' >&2
+    exit 15
+  fi
+  node -e '
+const fs = require("fs");
+const path = require("path");
+const { spawnSync } = require("child_process");
+const [registryPath, expectedSlug, root, headCommit] = process.argv.slice(1);
+const statuses = ["PROPOSED", "PLANNING_ONLY", "APPROVED", "VERIFIED", "SUPERSEDED", "UNKNOWN"];
+const branchFields = ["durable_branch", "managed_workspace_branch", "branch"];
+const invalidPatternChars = /[*?[\]{}^$|()+\\]/;
+const cleanText = (value) => typeof value === "string" && value.length > 0 && !/[\r\n\t\0]/.test(value);
+const validAllowedPaths = (lane) => {
+  if (!Array.isArray(lane.allowed_paths) || lane.allowed_paths.length === 0) return false;
+  const seen = new Set();
+  for (const entry of lane.allowed_paths) {
+    if (!cleanText(entry) || path.posix.isAbsolute(entry) || /^[A-Za-z]:[\\/]/.test(entry) ||
+        entry.endsWith("/") || path.posix.normalize(entry) !== entry ||
+        entry.split("/").some((part) => part === "" || part === "." || part === ".." || part.toLowerCase() === ".git") ||
+        invalidPatternChars.test(entry) || seen.has(entry)) return false;
+    seen.add(entry);
+    const objectType = spawnSync("git", ["-C", root, "cat-file", "-t", `${headCommit}:${entry}`],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    if (objectType.status === 0 && objectType.stdout.trim() === "tree") return false;
+  }
+  return true;
+};
+let registry;
+try {
+  registry = JSON.parse(fs.readFileSync(registryPath, "utf8"));
+} catch {
+  process.exit(2);
+}
+if (!registry || registry.repository !== expectedSlug ||
+    !Array.isArray(registry.allowed_statuses) ||
+    registry.allowed_statuses.length !== statuses.length ||
+    statuses.some((status, index) => registry.allowed_statuses[index] !== status) ||
+    !Array.isArray(registry.lanes)) process.exit(2);
+
+const ids = new Set();
+const branchOwners = new Map();
+for (const lane of registry.lanes) {
+  if (!lane || !cleanText(lane.id) || ids.has(lane.id) ||
+      typeof lane.status !== "string" || !statuses.includes(lane.status)) process.exit(2);
+  ids.add(lane.id);
+  const mappedFields = branchFields.filter((field) => lane[field] !== undefined);
+  if (mappedFields.some((field) => !cleanText(lane[field]))) process.exit(2);
+  for (const field of mappedFields) {
+    const branch = lane[field];
+    const priorLane = branchOwners.get(branch);
+    if (priorLane && priorLane !== lane.id) process.exit(2);
+    branchOwners.set(branch, lane.id);
+  }
+  if (lane.status === "APPROVED" &&
+      (!cleanText(lane.owner) || mappedFields.length !== 1 || !validAllowedPaths(lane))) process.exit(2);
+}
+' "$candidate_registry" "$expected_slug" "$root" "$(
+    git -C "$root" rev-parse --verify "HEAD^{commit}" 2>/dev/null
+  )" >/dev/null 2>&1 || {
+    rm -f "$candidate_registry"
+    candidate_registry=""
+    printf '%s\n' 'ERROR candidate active-lane registry at HEAD is malformed or invalid' >&2
+    exit 15
+  }
+  if ! rm -f "$candidate_registry"; then
+    candidate_registry=""
+    printf '%s\n' 'ERROR unable to clean up candidate registry buffer' >&2
+    exit 15
+  fi
+  candidate_registry=""
 }
 
 resolve_authority
@@ -421,6 +511,10 @@ if [ "$mode" = "merge" ]; then
     printf 'ERROR merge authority is unavailable or invalid: %s\n' "${authority_error:-unknown authority error}" >&2
     exit 15
   fi
+  if [ "$lane_id" = "NONE" ] || [ "$lane_status" != "APPROVED" ] || [ -z "$lane_owner" ]; then
+    printf '%s\n' 'ERROR merge requires an approved current branch lane from trusted mainline authority' >&2
+    exit 15
+  fi
 
   # Require committed-scope validation before merge may return success
   if ! validate_committed_scope; then
@@ -428,6 +522,16 @@ if [ "$mode" = "merge" ]; then
     # but in case it returns non-zero without exiting, fail closed with 15
     printf '%s\n' 'ERROR committed-scope validation failed during merge' >&2
     exit 15
+  fi
+  candidate_changed=false
+  for committed_path in "${committed_paths[@]}"; do
+    if [ "$committed_path" = "$registry_path" ]; then
+      candidate_changed=true
+      break
+    fi
+  done
+  if [ "$candidate_changed" = true ]; then
+    validate_candidate_registry
   fi
 
   if [[ "$GATEKEEPER_PR_NUMBER" =~ ^[0-9]+$ ]] && \

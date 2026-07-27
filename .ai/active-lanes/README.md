@@ -38,6 +38,13 @@ by independent GitHub review, CI, Reviewer Disposition, and explicit human merge
 authorization. Its branch registry remains a proposal and becomes authority only after
 merge. Repository-local hooks are optional and may be absent.
 
+When a merge candidate changes `datahub-devpost.json`, merge validation independently
+retrieves and validates the candidate registry from `HEAD`. Current-branch authorization
+still comes only from the trusted authority commit; the candidate registry cannot
+self-authorize the branch. Candidate validation rejects malformed JSON, wrong repository
+identity, invalid statuses, duplicate IDs or branch mappings, and unsafe or duplicate
+allowlist entries before merge evidence can pass.
+
 Close a lane only after durable outcome and proof are recorded. Mark a replaced lane
 SUPERSEDED and point future work to its replacement rather than rewriting history. Do
 not delete branches, worktrees, commits, or other evidence before a merged PR is verified.
