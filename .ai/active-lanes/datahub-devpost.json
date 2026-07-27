@@ -69,7 +69,7 @@
     },
     {
       "id": "datahub-showcase-ecommerce-fixture-contract",
-      "status": "PLANNING_ONLY",
+      "status": "APPROVED",
       "durable_branch": "plan/datahub-showcase-ecommerce-fixture-contract",
       "owner": "datahub-fixture-planning-owner",
       "artifact": "docs/plans/showcase-ecommerce-fixture-contract-plan.md",
