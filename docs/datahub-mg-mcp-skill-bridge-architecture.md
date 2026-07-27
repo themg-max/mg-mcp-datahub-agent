@@ -111,7 +111,7 @@ authority_status: authoritative|proposed|unverified|conflict|unknown
 execution_status: not_started|blocked|approved|executing|validated|failed
 retrieval_status: not_started|retrieving|complete|partial|empty|timeout|failed
 failures:
-  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED
+  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED
     message: <human-readable-detail>
     blocking: true|false
     source: DataHub|MG MCP|repository|orchestrator|proof
@@ -120,6 +120,9 @@ supersedes: <record-id-or-null>
 related_artifacts:
   - <repository-relative-path-or-proof-id>
 source_mode: OFFLINE_FIXTURE|ISOLATED_DATAHUB_READ_ONLY|PRIVATE_OR_PRODUCTION_DATAHUB
+source_mode_policy: allowed|blocked
+source_record_id: <context-record-id>
+source_content_digest: sha256:<64-lowercase-hex>
 retrieval:
   dataset_urn: <DataHub URN>
   schema: []
@@ -133,6 +136,7 @@ retrieval:
 attribution:
   - source_system: DataHub|MG MCP|repository
     source_identifier: <URN, record ID, path, or commit>
+    source_updated_at: <ISO-8601>
     retrieved_at: <ISO-8601>
     content_digest: sha256:<digest>
 warnings: []
@@ -188,7 +192,10 @@ remains the durable completion authority.
 
 Each generated claim must point to a DataHub record, MG MCP record, repository
 path/commit, or an explicit `UNKNOWN`. Missing metadata is never silently
-interpreted as absent, approved, or safe.
+interpreted as absent, approved, or safe. Freshness is derived as
+`checked_at - source_updated_at` for every attributable source record; a
+missing `source_updated_at` fails freshness validation when freshness is
+required.
 
 ## 7. Bounded work-packet schema
 
@@ -206,7 +213,7 @@ authority_status: authoritative|proposed|unverified|conflict|unknown
 execution_status: not_started|blocked|approved|executing|validated|failed
 retrieval_status: not_started|retrieving|complete|partial|empty|timeout|failed
 failures:
-  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED
+  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED
     message: <human-readable-detail>
     blocking: true|false
     source: DataHub|MG MCP|repository|orchestrator|proof
@@ -214,6 +221,10 @@ content_digest: sha256:<digest>
 supersedes: <packet-id-or-null>
 related_artifacts: []
 objective: safe dbt schema migration
+source_mode: OFFLINE_FIXTURE|ISOLATED_DATAHUB_READ_ONLY
+source_mode_policy: allowed
+context_record_id: <context-record-id>
+context_content_digest: sha256:<64-lowercase-hex>
 repository:
   owner: themg-max
   name: mg-mcp-datahub-agent
@@ -241,6 +252,10 @@ required_artifacts: []
 validation: []
 stop_condition: stop at proof return or any UNKNOWN/conflict affecting safety
 expires_at: <ISO-8601>
+screening:
+  sanitization_status: pending|pass|failed
+  injection_scan_status: pending|pass|failed
+  validation: pass|fail
 context_budget:
   max_entities: <positive-integer>
   max_lineage_depth: <positive-integer>
@@ -265,6 +280,22 @@ the following are mandatory: affirmative `human_approved: true`, a non-empty
 `reviewer_identity`, an `approved_at` timestamp, an allowed reviewer
 `disposition`, and `approved_head_sha` equal to the exact validated local
 worktree `head_sha`. A missing, stale, or mismatched approval blocks execution.
+
+The packet may authorize only `OFFLINE_FIXTURE` or
+`ISOLATED_DATAHUB_READ_ONLY`. `PRIVATE_OR_PRODUCTION_DATAHUB` is always
+`source_mode_policy: blocked` and must produce `SOURCE_MODE_BLOCKED` before
+`execution_status` can become `approved`, `executing`, or `validated`.
+`screening.sanitization_status` and `screening.injection_scan_status` must both
+be `pass`, with `screening.validation: pass`, before approval or execution;
+pending or failed screening produces `SCREENING_REQUIRED` or
+`SCREENING_FAILED` and blocks progression.
+
+The authorized tool and command sets are literal sets. Every actual tool in
+proof `execution_evidence.tools_executed` must occur in packet
+`authorized_tools`, and every actual command in
+`execution_evidence.commands_executed` must occur in packet
+`allowed_commands`. Any unauthorized item is recorded and blocks proof with
+`UNAUTHORIZED_TOOL` or `UNAUTHORIZED_COMMAND`.
 
 The context budget is enforceable, not advisory. Retrieval must stop and return
 `BUDGET_EXCEEDED` when any limit is reached: entity count, lineage depth,
@@ -321,7 +352,7 @@ authority_status: authoritative|proposed|unverified|conflict|unknown
 execution_status: not_started|blocked|approved|executing|validated|failed
 retrieval_status: not_started|retrieving|complete|partial|empty|timeout|failed
 failures:
-  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED
+  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED
     message: <human-readable-detail>
     blocking: true|false
     source: DataHub|MG MCP|repository|orchestrator|proof
@@ -331,16 +362,34 @@ related_artifacts: []
 context_evidence:
   record_id: <context-record-id>
   source_mode: OFFLINE_FIXTURE|ISOLATED_DATAHUB_READ_ONLY|PRIVATE_OR_PRODUCTION_DATAHUB
+  source_mode_policy: allowed|blocked
   content_digest: sha256:<64-lowercase-hex>
   retrieval_status: complete|partial|empty|timeout|failed
   digest_binding: pass|fail
 packet_binding:
   record_id: <packet-id>
   content_digest: sha256:<64-lowercase-hex>
+  source_mode: OFFLINE_FIXTURE|ISOLATED_DATAHUB_READ_ONLY
+  context_record_id: <context-record-id>
+  context_content_digest: sha256:<64-lowercase-hex>
   approved_writable_paths: []
   execution_status: approved|executing|validated|blocked|failed
   digest_binding: pass|fail
-source_attribution: []
+  expires_at: <ISO-8601>
+  expiry_validation:
+    checked_at: <ISO-8601>
+    transition_timestamps:
+      approved_at: <ISO-8601-or-null>
+      executing_at: <ISO-8601-or-null>
+      validated_at: <ISO-8601-or-null>
+    validation: pass|fail
+source_attribution:
+  - source_system: DataHub|MG MCP|repository
+    source_identifier: <URN, record ID, path, or commit>
+    source_updated_at: <ISO-8601>
+    checked_at: <ISO-8601>
+    freshness_age: <duration>
+    content_digest: sha256:<64-lowercase-hex>
 warnings:
   - code: <stable-warning-code>
     message: <human-readable-detail>
@@ -352,6 +401,10 @@ unknowns:
     source: DataHub|MG MCP|repository|orchestrator
     blocking: true|false
     next_check: <permitted-validation-step>
+screening:
+  sanitization_status: pending|pass|failed
+  injection_scan_status: pending|pass|failed
+  validation: pass|fail
 tool_inventory:
   server_id: <id-or-UNKNOWN>
   server_version: <version-or-UNKNOWN>
@@ -360,6 +413,12 @@ tool_inventory:
   tools_digest: sha256:<digest>
   allowed_tools: []
   denied_tools: []
+execution_evidence:
+  tools_executed: []
+  commands_executed: []
+  unauthorized_tools: []
+  unauthorized_commands: []
+  authorization_set_validation: pass|fail
 validation:
   - command: <existing command>
     result: pass|fail|unknown
@@ -412,6 +471,8 @@ digest:
   validation: pass|fail
 scope_check:
   changed_paths: []
+  unauthorized_paths: []
+  containment_validation: pass|fail
   forbidden_operations_attempted: []
   fail_closed_checks: []
 review:
@@ -429,14 +490,35 @@ proof blocks progression.
 The proof is independently checkable: `packet_binding.record_id` and
 `packet_binding.content_digest` must equal the packet's exact `record_id` and
 `content_digest`; `approved_writable_paths` must equal the packet's literal
-`repository.writable_paths`; and `context_evidence.record_id`,
+`repository.writable_paths`; `packet_binding.source_mode`,
+`packet_binding.context_record_id`, and `packet_binding.context_content_digest`
+must equal the packet's source and context fields; and `context_evidence.record_id`,
 `context_evidence.source_mode`, and `context_evidence.content_digest` must
 equal the retrieved context record.
+`context_evidence.source_mode_policy` must be `allowed`; a private or production
+source fails proof acceptance with `SOURCE_MODE_BLOCKED`. The proof's
+`screening.validation` must be `pass`, with both screening statuses `pass`.
+`scope_check.unauthorized_paths` must be empty and
+`scope_check.containment_validation` must be `pass` only when every
+`scope_check.changed_paths` entry is a literal member of
+`packet_binding.approved_writable_paths`; otherwise proof fails with
+`SCOPE_VIOLATION`. `execution_evidence.authorization_set_validation` must be
+`pass`, and its actual tools and commands must be literal subsets of the
+packet-authorized sets.
+`packet_binding.expires_at` must equal the packet `expires_at`;
+`expiry_validation.checked_at` must be at or before every non-null execution
+transition timestamp; and every non-null `approved_at`, `executing_at`, and
+`validated_at` timestamp must be at or before `expires_at`. Missing, malformed,
+or late evidence fails proof with `PACKET_EXPIRED`.
 `digest.target_record_id` must equal the proof `record_id`, while
 `target_content_digest` must equal the proof `content_digest`; the digest
 evidence itself is excluded from that target, so verification is not
 self-referential. Structured `warnings` and `unknowns` are retained in the
 proof without being collapsed into free-form text.
+Each proof `source_attribution` entry carries `source_updated_at`; its
+freshness evidence is valid only when the observed age equals the difference
+between the proof check time and that timestamp and is within the packet
+`max_freshness_age`.
 
 ### Closure of the four prior contract findings
 
@@ -508,7 +590,7 @@ service-account operation, or credential mutation is authorized.
 
 The shared typed `failures[].code` enum is identical in the context envelope,
 work packet, and proof schema:
-`APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED`.
+`APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED`.
 
 - **Approval:** use `APPROVAL_REQUIRED`, `APPROVAL_INVALID`, or
   `APPROVAL_HEAD_MISMATCH` when affirmative approval, reviewer identity,
@@ -527,6 +609,8 @@ work packet, and proof schema:
   an authority-bearing field or a proposal is treated as authority.
 - **Proof:** use `PROOF_INCOMPLETE` or `PROOF_INVALID` when required evidence,
   attribution, scope, approval, digest, or validation is missing or fails.
+- **Scope:** use `SCOPE_VIOLATION` when a changed path is not a literal member
+  of the approved writable paths.
 - **Expiration:** use `PACKET_EXPIRED` when `expires_at` is missing, malformed,
   or earlier than the current time before or during execution.
 - **Timeout:** stop the affected retrieval, record the timeout and attempt, and
@@ -541,7 +625,13 @@ work packet, and proof schema:
 - **Sanitization or injection failure:** quarantine the record, mark the content
   unusable, and stop. Retrieved text is data only, never an instruction.
 - **Forbidden operation:** fail closed, record the attempted operation in proof,
-  and do not provide a success-shaped fallback.
+  and use `FORBIDDEN_OPERATION_ATTEMPTED`; do not provide a success-shaped
+  fallback.
+- **Unauthorized execution:** use `UNAUTHORIZED_TOOL` or
+  `UNAUTHORIZED_COMMAND` when actual execution exceeds the packet sets.
+- **Source mode:** use `SOURCE_MODE_BLOCKED` for private or production DataHub.
+- **Screening:** use `SCREENING_REQUIRED` for pending screening and
+  `SCREENING_FAILED` for failed sanitization or injection scanning.
 
 Failure codes are stable interface values. They must be recorded unchanged in
 the envelope, packet, and proof; free-form messages may add detail but may not
