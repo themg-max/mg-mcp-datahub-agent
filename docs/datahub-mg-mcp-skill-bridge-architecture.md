@@ -93,6 +93,33 @@ The technology boundary is intentionally narrow:
 Exact API, MCP server, deployment, and authentication choices remain open until
 an implementation plan is approved. This architecture does not authorize calls.
 
+### Retrieval workflow and pre-retrieval manifest
+
+Retrieval follows this order and may not be reordered:
+
+The manifest is the pre-retrieval control point. It must contain the complete
+context budget before step 2 and before any DataHub query, and its canonical
+`manifest_digest` is computed after omitting `manifest_digest` itself.
+
+1. create the bounded packet and its `pre_retrieval_manifest`;
+2. validate manifest budgets, source mode, DataHub connection binding, and
+   immutable selected-skill identity;
+3. begin retrieval only after manifest validation passes;
+4. screen and sanitize retrieved content;
+5. obtain the required human approval and execute only the approved packet; and
+6. produce proof containing the manifest, connection, skill, and execution
+   evidence.
+
+A retrieval attempt before
+manifest validation fails closed with `BUDGET_EXCEEDED`,
+`CONNECTION_MISMATCH`, or `SKILL_BINDING_FAILED` as applicable.
+
+For `ISOLATED_DATAHUB_READ_ONLY`, the observed server ID, environment ID,
+endpoint digest, principal identity, and access mode must equal the approved
+values in the manifest. Any mismatch blocks retrieval and proof with
+`CONNECTION_MISMATCH`; private or production mode is never an acceptable
+fallback.
+
 ## 5. Governed context envelope
 
 Every retrieval result passed to generation is wrapped in a versioned envelope.
@@ -111,7 +138,7 @@ authority_status: authoritative|proposed|unverified|conflict|unknown
 execution_status: not_started|blocked|approved|executing|validated|failed
 retrieval_status: not_started|retrieving|complete|partial|empty|timeout|failed
 failures:
-  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED
+  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED|CONNECTION_MISMATCH|SKILL_BINDING_FAILED
     message: <human-readable-detail>
     blocking: true|false
     source: DataHub|MG MCP|repository|orchestrator|proof
@@ -123,6 +150,13 @@ source_mode: OFFLINE_FIXTURE|ISOLATED_DATAHUB_READ_ONLY|PRIVATE_OR_PRODUCTION_DA
 source_mode_policy: allowed|blocked
 source_record_id: <context-record-id>
 source_content_digest: sha256:<64-lowercase-hex>
+datahub_connection:
+  server_id: <approved-server-id>
+  environment_id: <approved-environment-id>
+  endpoint_digest: sha256:<64-lowercase-hex>
+  principal_identity: <approved-principal-identity>
+  access_mode: ISOLATED_DATAHUB_READ_ONLY
+  validation: pass|fail
 retrieval:
   dataset_urn: <DataHub URN>
   schema: []
@@ -213,7 +247,7 @@ authority_status: authoritative|proposed|unverified|conflict|unknown
 execution_status: not_started|blocked|approved|executing|validated|failed
 retrieval_status: not_started|retrieving|complete|partial|empty|timeout|failed
 failures:
-  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED
+  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED|CONNECTION_MISMATCH|SKILL_BINDING_FAILED
     message: <human-readable-detail>
     blocking: true|false
     source: DataHub|MG MCP|repository|orchestrator|proof
@@ -225,6 +259,30 @@ source_mode: OFFLINE_FIXTURE|ISOLATED_DATAHUB_READ_ONLY
 source_mode_policy: allowed
 context_record_id: <context-record-id>
 context_content_digest: sha256:<64-lowercase-hex>
+pre_retrieval_manifest:
+  manifest_digest: sha256:<64-lowercase-hex>
+  validation: pass|fail
+  context_budget:
+    max_entities: <positive-integer>
+    max_lineage_depth: <positive-integer>
+    max_lineage_edges: <positive-integer>
+    max_total_records: <positive-integer>
+    max_token_estimate: <positive-integer>
+    max_freshness_age: <duration>
+    retrieval_timeout: <duration>
+  datahub_connection:
+    approved_server_id: <approved-server-id>
+    approved_environment_id: <approved-environment-id>
+    approved_endpoint_digest: sha256:<64-lowercase-hex>
+    approved_principal_identity: <approved-principal-identity>
+    required_access_mode: ISOLATED_DATAHUB_READ_ONLY
+  selected_skill:
+    skill_id: <immutable-skill-id>
+    source: <immutable-source-reference>
+    version: <immutable-version>
+    license: <license-identifier>
+    content_digest: sha256:<64-lowercase-hex>
+    validation: pass|fail
 repository:
   owner: themg-max
   name: mg-mcp-datahub-agent
@@ -256,14 +314,6 @@ screening:
   sanitization_status: pending|pass|failed
   injection_scan_status: pending|pass|failed
   validation: pass|fail
-context_budget:
-  max_entities: <positive-integer>
-  max_lineage_depth: <positive-integer>
-  max_lineage_edges: <positive-integer>
-  max_total_records: <positive-integer>
-  max_token_estimate: <positive-integer>
-  max_freshness_age: <duration>
-  retrieval_timeout: <duration>
 approval:
   required: true
   human_approved: false
@@ -289,6 +339,15 @@ The packet may authorize only `OFFLINE_FIXTURE` or
 be `pass`, with `screening.validation: pass`, before approval or execution;
 pending or failed screening produces `SCREENING_REQUIRED` or
 `SCREENING_FAILED` and blocks progression.
+
+The `pre_retrieval_manifest` is validated before retrieval begins. Its
+`context_budget` must be complete before the first query, its
+`manifest_digest` must verify against the manifest with that field omitted, and
+its `datahub_connection` must contain the approved server, environment,
+endpoint digest, principal identity, and `ISOLATED_DATAHUB_READ_ONLY` mode.
+Its `selected_skill` must contain an immutable skill ID, source, version,
+license, and content digest; any missing or changed value fails with
+`SKILL_BINDING_FAILED`.
 
 The authorized tool and command sets are literal sets. Every actual tool in
 proof `execution_evidence.tools_executed` must occur in packet
@@ -352,7 +411,7 @@ authority_status: authoritative|proposed|unverified|conflict|unknown
 execution_status: not_started|blocked|approved|executing|validated|failed
 retrieval_status: not_started|retrieving|complete|partial|empty|timeout|failed
 failures:
-  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED
+  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED|CONNECTION_MISMATCH|SKILL_BINDING_FAILED
     message: <human-readable-detail>
     blocking: true|false
     source: DataHub|MG MCP|repository|orchestrator|proof
@@ -366,12 +425,20 @@ context_evidence:
   content_digest: sha256:<64-lowercase-hex>
   retrieval_status: complete|partial|empty|timeout|failed
   digest_binding: pass|fail
+  datahub_connection:
+    server_id: <observed-server-id>
+    environment_id: <observed-environment-id>
+    endpoint_digest: sha256:<64-lowercase-hex>
+    principal_identity: <observed-principal-identity>
+    access_mode: ISOLATED_DATAHUB_READ_ONLY
+    validation: pass|fail
 packet_binding:
   record_id: <packet-id>
   content_digest: sha256:<64-lowercase-hex>
   source_mode: OFFLINE_FIXTURE|ISOLATED_DATAHUB_READ_ONLY
   context_record_id: <context-record-id>
   context_content_digest: sha256:<64-lowercase-hex>
+  pre_retrieval_manifest_digest: sha256:<64-lowercase-hex>
   approved_writable_paths: []
   execution_status: approved|executing|validated|blocked|failed
   digest_binding: pass|fail
@@ -383,6 +450,30 @@ packet_binding:
       executing_at: <ISO-8601-or-null>
       validated_at: <ISO-8601-or-null>
     validation: pass|fail
+pre_retrieval_evidence:
+  manifest_digest: sha256:<64-lowercase-hex>
+  manifest_validation: pass|fail
+  budget_declared_before_retrieval: true|false
+  validation: pass|fail
+connection_evidence:
+  approved_server_id: <approved-server-id>
+  observed_server_id: <observed-server-id>
+  approved_environment_id: <approved-environment-id>
+  observed_environment_id: <observed-environment-id>
+  approved_endpoint_digest: sha256:<64-lowercase-hex>
+  observed_endpoint_digest: sha256:<64-lowercase-hex>
+  approved_principal_identity: <approved-principal-identity>
+  observed_principal_identity: <observed-principal-identity>
+  required_access_mode: ISOLATED_DATAHUB_READ_ONLY
+  observed_access_mode: ISOLATED_DATAHUB_READ_ONLY
+  validation: pass|fail
+selected_skill:
+  skill_id: <immutable-skill-id>
+  source: <immutable-source-reference>
+  version: <immutable-version>
+  license: <license-identifier>
+  content_digest: sha256:<64-lowercase-hex>
+  binding_validation: pass|fail
 source_attribution:
   - source_system: DataHub|MG MCP|repository
     source_identifier: <URN, record ID, path, or commit>
@@ -495,6 +586,20 @@ The proof is independently checkable: `packet_binding.record_id` and
 must equal the packet's source and context fields; and `context_evidence.record_id`,
 `context_evidence.source_mode`, and `context_evidence.content_digest` must
 equal the retrieved context record.
+`pre_retrieval_evidence.manifest_digest` must equal the packet's
+`pre_retrieval_manifest.manifest_digest`, and
+`manifest_validation` and `budget_declared_before_retrieval` must be `true`.
+The proof `context_budget.limits` must equal the packet
+`pre_retrieval_manifest.context_budget` field-for-field. Every proof
+`connection_evidence` approved value must equal the packet manifest's approved
+value, every observed value must equal the actual retrieval environment, and
+`validation` must be `pass` only when all five values and the
+`ISOLATED_DATAHUB_READ_ONLY` mode match. A mismatch fails with
+`CONNECTION_MISMATCH`.
+The proof `selected_skill` must exactly equal
+`packet.pre_retrieval_manifest.selected_skill` across skill ID, source, version,
+license, and content digest, with `binding_validation: pass`; any mismatch
+fails with `SKILL_BINDING_FAILED`.
 `context_evidence.source_mode_policy` must be `allowed`; a private or production
 source fails proof acceptance with `SOURCE_MODE_BLOCKED`. The proof's
 `screening.validation` must be `pass`, with both screening statuses `pass`.
@@ -590,7 +695,7 @@ service-account operation, or credential mutation is authorized.
 
 The shared typed `failures[].code` enum is identical in the context envelope,
 work packet, and proof schema:
-`APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED`.
+`APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED|CONNECTION_MISMATCH|SKILL_BINDING_FAILED`.
 
 - **Approval:** use `APPROVAL_REQUIRED`, `APPROVAL_INVALID`, or
   `APPROVAL_HEAD_MISMATCH` when affirmative approval, reviewer identity,
@@ -632,6 +737,12 @@ work packet, and proof schema:
 - **Source mode:** use `SOURCE_MODE_BLOCKED` for private or production DataHub.
 - **Screening:** use `SCREENING_REQUIRED` for pending screening and
   `SCREENING_FAILED` for failed sanitization or injection scanning.
+- **Connection:** use `CONNECTION_MISMATCH` when the observed isolated
+  DataHub server, environment, endpoint digest, principal, or access mode
+  differs from the pre-retrieval manifest.
+- **Skill binding:** use `SKILL_BINDING_FAILED` when selected skill identity,
+  source, version, license, or digest is absent, mutable, or differs from the
+  packet or proof.
 
 Failure codes are stable interface values. They must be recorded unchanged in
 the envelope, packet, and proof; free-form messages may add detail but may not
