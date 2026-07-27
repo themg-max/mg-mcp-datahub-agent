@@ -36,14 +36,18 @@ The judge-visible causal chain is:
    glossary, quality, standards, provenance, and authority state;
 3. validate per-record source freshness after retrieval and before approval;
 4. bind the packet to its source, manifest, allowed scope, blocked operations,
-   expected worktree identity, approval requirement, expiry, and stop condition;
-5. validate the current checkout against the immutable packet worktree binding;
-6. use trusted current time while accepting affirmative approval so status
+   expected clean worktree identity, approval requirement, expiry, and stop
+   condition;
+5. validate the current checkout identity and clean-state digest before approval
+   and again immediately before rendering;
+6. bind approval to both the approval-payload digest and a full packet
+   `approved_content_digest` snapshot;
+7. use trusted current time while accepting affirmative approval so status
    cannot become `approved` after packet expiry;
-7. keep packet expiry valid through rendering, final validation, and proof
+8. keep packet expiry valid through rendering, final validation, and proof
    completion using trusted current-time transition checks;
-8. use only verified metadata to constrain the proposal; and
-9. return reviewable proof with no external writes.
+9. use only verified metadata to constrain the proposal; and
+10. return reviewable proof with no external writes.
 
 The result is a proposal for human review. It is never approval, a production
 dbt migration, a DataHub or MG MCP mutation, a deployment, or merge authority.
@@ -65,8 +69,8 @@ surfaces instead of creating a second governance model:
   read-only, proof, failure-code, and maturity-boundary model.
 - `docs/datahub-mg-mcp-skill-bridge-architecture.md` supplies the
   non-reorderable manifest, canonical digest, immutable skill, freshness,
-  worktree identity, approval-transition expiry, execution-transition expiry,
-  and shared failure-code contracts.
+  worktree identity, packet/content approval bindings, approval-transition
+  expiry, execution-transition expiry, and shared failure-code contracts.
 - The existing `docs/fixtures/showcase-ecommerce/*` artifacts define planning
   vocabulary, metadata dimensions, budgets, public-safety rules, and expected
   blocked behavior. They are planning contracts, not runtime authority.
@@ -92,8 +96,8 @@ The workflow is non-reorderable:
 1. validate `OFFLINE_FIXTURE` as the permitted source mode;
 2. create the bounded packet and embedded `pre_retrieval_manifest`, including
    all context budgets, fixture/source binding, immutable selected-skill fields,
-   expected worktree identity, approval requirement, expiry, and canonical
-   manifest digest;
+   expected worktree identity and clean-state policy, approval requirement,
+   expiry, and canonical manifest digest;
 3. before reading any fixture record, validate manifest budgets, source binding,
    content digest, manifest-level deterministic freshness inputs
    (`max_freshness_age` and `checked_at`), immutable selected-skill identity,
@@ -115,29 +119,43 @@ The workflow is non-reorderable:
 11. screen all retrieved text as untrusted data only;
 12. build canonical context and bind it back to the validated packet;
 13. resolve the current repository root, Git common directory, absolute worktree
-    path and identity, branch, and exact head from the checkout;
-14. compare every resolved checkout value only with the immutable packet
-    worktree binding, reject `main`, a detached or missing branch, another
-    repository clone, another worktree, a wrong branch, or a head mismatch, and
-    return `WORKTREE_INVALID` before approval evaluation;
+    path and identity, branch, exact head, and canonical output of
+    `git status --porcelain=v1 -z --untracked-files=all`;
+14. compare the resolved checkout identity only with the immutable packet
+    worktree binding, require `untracked_policy: deny_all`, require zero staged,
+    unstaged, or untracked entries, record the canonical empty
+    `worktree_status_digest`, reject `main`, a detached or missing branch,
+    another clone or worktree, a wrong branch or head, or any dirty-state entry,
+    and return `WORKTREE_INVALID` before approval evaluation;
 15. validate screening bindings and affirmative packet approval fields,
-    including `human_approved: true`, reviewer identity, disposition, approval
-    digest, approved worktree identity and head, and current packet digest;
-16. before changing status to `approved`, obtain trusted current time, validate
+    including `human_approved: true`, reviewer identity, disposition,
+    `approved_packet_digest`, `approved_content_digest`, approved worktree
+    identity, approved clean-state digest, approved head, and current packet
+    digest;
+16. require `approved_content_digest` to equal the packet `content_digest` and
+    proof approval binding, and require `approved_packet_digest` to equal the
+    current approval-payload digest; any valid approval snapshot that diverges
+    from current packet bytes or clean-state binding returns
+    `PACKET_APPROVAL_MISMATCH` and invalidates approval;
+17. before changing status to `approved`, obtain trusted current time, validate
     that packet `expires_at` is present, timezone-aware, correctly bound, and not
     elapsed, record `approval_expiry_checked_at`, and record `approved_at` only
     when both timestamps are at or before `expires_at`; otherwise return
     `PACKET_EXPIRED` without accepting approval;
-17. before rendering, obtain trusted current time again, revalidate expiry, and
-    record `executing_at` only when it is at or before `expires_at`;
-18. render the bounded proposal, obtain trusted current time at rendering
+18. immediately before rendering, re-resolve checkout identity and
+    `git status --porcelain=v1 -z --untracked-files=all`, require the same clean
+    identity and empty status digest approved in the packet, obtain trusted
+    current time, revalidate expiry, and record `executing_at` only when every
+    gate passes and it is at or before `expires_at`;
+19. render the bounded proposal, obtain trusted current time at rendering
     completion, and record `validated_at` only when it is at or before
     `expires_at`; and
-19. immediately before emitting `proposal_ready` and final proof, revalidate that
-    `approval_expiry_checked_at`, `approved_at`, every later expiry-check time,
-    `executing_at`, and `validated_at` are all at or before `expires_at`;
-    otherwise return `PACKET_EXPIRED`, discard the proposal, and emit the
-    deterministic blocked result.
+20. immediately before emitting `proposal_ready` and final proof, revalidate the
+    packet/content approval snapshots, worktree identity, pre-execution clean
+    status digest, `approval_expiry_checked_at`, `approved_at`, every later
+    expiry-check time, `executing_at`, and `validated_at`; otherwise return the
+    exact failure code, discard the proposal, and emit the deterministic blocked
+    result.
 
 ### 3.1 Manifest integrity, bounded retrieval, and deterministic freshness
 
@@ -182,34 +200,42 @@ implementation success path remains blocked with `SKILL_BINDING_FAILED` until a
 separately reviewed registry record supplies and validates every field. A local
 label or model-selected name cannot satisfy this gate.
 
-### 3.3 Full worktree identity binding
+### 3.3 Full worktree identity and clean-state binding
 
-Before approval is evaluated, the worker must resolve and canonicalize:
+Before approval is evaluated, and again immediately before rendering, the worker
+must resolve and canonicalize:
 
 - repository root;
 - Git common directory;
 - absolute worktree path and registered worktree identity;
-- branch name; and
-- exact head SHA.
+- branch name;
+- exact head SHA; and
+- `git status --porcelain=v1 -z --untracked-files=all`.
 
-At this gate, those observed values are compared only with the immutable packet
-worktree binding. The worker must reject `main`, a detached or missing branch,
-another clone of the same repository, another registered worktree, a wrong
-absolute path, a wrong branch, or an exact-head mismatch. Any missing,
-ambiguous, or mismatched checkout-to-packet value returns `WORKTREE_INVALID`;
-`proposal` remains `null` and `executed_writes` remains empty. Matching only the
-head SHA is insufficient.
+The packet's explicit untracked-file policy is `deny_all`. Before approval and
+before rendering, the canonical status output must contain zero staged,
+unstaged, and untracked entries. The empty output is hashed as
+`worktree_status_digest`; packet, approval, and proof must carry the same digest.
+The worker must reject `main`, a detached or missing branch, another repository
+clone, another registered worktree, a wrong path, wrong branch, wrong head, any
+tracked modification, any staged change, or any untracked file. Any missing,
+ambiguous, dirty, or mismatched checkout-to-packet value returns
+`WORKTREE_INVALID`; `proposal` remains `null` and `executed_writes` remains
+empty. Matching only the head SHA is insufficient, and Gatekeeper validation
+does not replace these worker-local checks.
 
 Approval evidence is not used to classify a checkout as valid or invalid.
-Approval-to-packet and approval-to-worktree mismatches are evaluated only in the
-subsequent approval gate with approval-specific failure codes.
+Approval-to-packet, approval-to-content, and approval-to-worktree mismatches are
+evaluated only in the subsequent approval gate with approval-specific failure
+codes.
 
-### 3.4 Approval and execution-transition expiry binding
+### 3.4 Approval content binding and transition expiry
 
 SQL/YAML rendering is packet execution by a bounded worker, not a pre-approval
 preview. After checkout-to-packet worktree validation passes, the worker must
-validate affirmative human approval tied to the exact packet digest, approved
-worktree identity, and approved head. Approval failure semantics are:
+validate affirmative human approval tied to the exact packet, full content
+snapshot, clean worktree identity, and approved head. Approval failure semantics
+are:
 
 - no approval object, missing `human_approved`, or `human_approved: false`:
   `APPROVAL_REQUIRED`;
@@ -217,9 +243,19 @@ worktree identity, and approved head. Approval failure semantics are:
   `APPROVAL_INVALID`;
 - an approval object whose exact-head evidence is missing, invalid, or cannot be
   validated as exact-head approval evidence: `APPROVAL_HEAD_MISMATCH`; and
-- syntactically valid affirmative approval whose approved worktree identity,
-  head, approval digest, or approved packet digest diverges from the current
-  packet and proof bindings: `PACKET_APPROVAL_MISMATCH`.
+- syntactically valid affirmative approval whose `approved_packet_digest`,
+  `approved_content_digest`, approved clean-state digest, worktree identity, or
+  head diverges from the current packet, content, checkout, or proof bindings:
+  `PACKET_APPROVAL_MISMATCH`.
+
+`approved_content_digest` snapshots the packet `content_digest` at approval time
+and is distinct from `approved_packet_digest`, which snapshots the canonical
+approval payload. Packet approval and proof must carry identical values for both
+fields. If any packet content changes, including an approval-payload-excluded
+field, current `content_digest` no longer equals `approved_content_digest`; the
+prior approval is invalidated, `human_approved` becomes false, approval fields
+are cleared, and execution remains blocked with `PACKET_APPROVAL_MISMATCH` until
+re-approval.
 
 Before status may become `approved`, the worker must obtain trusted current time
 and prove the packet is still unexpired. `approval_expiry_checked_at` and the
@@ -242,8 +278,8 @@ approval is accepted after expiry or rendering starts before expiry but finishes
 after it.
 
 Every blocked result has `proposal: null` and `executed_writes: []`; a proposal
-rendered before a late expiry determination is discarded and cannot be emitted
-as `proposal_ready`.
+rendered before a late integrity or expiry determination is discarded and cannot
+be emitted as `proposal_ready`.
 
 ## 4. Authority-state behavior
 
@@ -266,8 +302,9 @@ of absence. Conflicting attributable records block the affected proposal.
 ### 5.1 Success output
 
 Only after manifest digest, budgets, manifest fields, immutable-skill,
-post-retrieval per-record freshness, screening, context, checkout-to-packet
-worktree identity, affirmative `human_approved: true` approval,
+post-retrieval per-record freshness, screening, context, clean
+checkout-to-packet worktree identity, `approved_packet_digest`,
+`approved_content_digest`, affirmative `human_approved: true` approval,
 approval-transition trusted-time expiry validation, and continuous later
 execution-transition expiry validation all pass, emit one stable JSON result
 containing:
@@ -280,10 +317,12 @@ containing:
   and authority state;
 - a bounded packet with `humanApprovalRequired: true`;
 - resolved repository root, Git common directory, absolute worktree identity,
-  non-`main` branch, and exact head, bound first to the immutable packet and then
-  separately verified against approval evidence;
-- `human_approved: true`, reviewer identity, disposition, approval digest, and
-  packet-bound `expires_at`;
+  non-`main` branch, exact head, `untracked_policy: deny_all`, canonical empty
+  worktree status, and `worktree_status_digest`, verified before approval and
+  before rendering;
+- `human_approved: true`, reviewer identity, disposition,
+  `approved_packet_digest`, `approved_content_digest`, approved clean-state
+  digest, and packet-bound `expires_at`;
 - trusted-time `approval_expiry_checked_at`, `approved_at`, `executing_at`,
   `validated_at`, pre-render, render-completion, and final-emission expiry checks,
   all at or before `expires_at`;
@@ -291,9 +330,9 @@ containing:
   and quality assertion;
 - deterministic SQL and matching dbt schema-test YAML proposal shapes; and
 - proof for manifest digest, budgets, fixture, skill, freshness stage, worktree
-  packet binding, approval binding, approval-transition and later
-  execution-transition expiry, packet, context, commands, tests, changed paths,
-  warnings, and `executed_writes: []`.
+  identity and clean-state binding, packet/content approval bindings,
+  approval-transition and later execution-transition expiry, packet, context,
+  commands, tests, changed paths, warnings, and `executed_writes: []`.
 
 Stable inputs must produce stable key, record, array, and serialization order.
 A successful result remains a proposal and does not authorize implementation,
@@ -303,10 +342,10 @@ deployment, production migration, or merge.
 
 Emit a stable blocked result instead of guessed SQL/YAML when any source mode,
 manifest digest, budget, manifest field, immutable skill, post-retrieval
-freshness, screening, checkout-to-packet worktree identity, affirmative approval,
-approval-transition expiry, later execution-transition expiry, authority,
-command, or safety-critical `UNKNOWN` gate fails. The exact applicable failure
-code includes:
+freshness, screening, checkout identity, worktree clean state, packet/content
+approval snapshot, affirmative approval, approval-transition expiry, later
+execution-transition expiry, authority, command, or safety-critical `UNKNOWN`
+gate fails. The exact applicable failure code includes:
 
 - `DIGEST_INVALID`;
 - `BUDGET_EXCEEDED`;
@@ -345,18 +384,17 @@ These paths require a separately registered and approved implementation lane:
    provenance, and UNKNOWN records.
 3. `src/showcase-ecommerce/approval.ts` — screening-to-packet binding;
    checkout-to-immutable-packet repository root, Git common directory, absolute
-   worktree identity, non-`main` branch, and exact-head validation; separate
-   affirmative approval-to-packet/worktree/head validation; trusted-time
-   approval-transition expiry check; and approval acceptance only while
-   unexpired.
-4. `src/showcase-ecommerce/proposal.ts` — trusted-time pre-render and
-   render-completion expiry checks, deterministic SQL/YAML rendering only while
-   unexpired, final validation before emission, or a blocked result that
-   discards any late proposal.
+   worktree identity, non-`main` branch, exact-head and clean-status validation;
+   `approved_packet_digest` and `approved_content_digest`; trusted-time
+   approval-transition expiry; and approval acceptance only while unexpired.
+4. `src/showcase-ecommerce/proposal.ts` — pre-render identity/clean-state recheck,
+   trusted-time pre-render and render-completion expiry checks, deterministic
+   SQL/YAML rendering only while unexpired, final validation before emission, or
+   a blocked result that discards any late or integrity-invalid proposal.
 5. `src/showcase-ecommerce/proof.ts` — canonical manifest-digest, budget, fixture,
-   skill, freshness-stage, worktree packet binding, approval binding,
-   packet-bound expiry, approval and execution transition timestamps and expiry
-   checks, packet, context, and digest evidence.
+   skill, freshness-stage, worktree identity and clean-state digest,
+   packet/content approval snapshots, packet-bound expiry, approval and execution
+   transition timestamps and checks, packet, context, and digest evidence.
 6. `src/cli.ts` — an explicitly selected showcase command path that preserves
    existing generic behavior.
 7. `fixtures/showcase-ecommerce/context.json` and
@@ -368,18 +406,21 @@ These paths require a separately registered and approved implementation lane:
    `DIGEST_INVALID`; every entity, lineage, edge, record, token, freshness-age,
    and timeout budget excess returning `BUDGET_EXCEEDED`; missing or changed
    skill fields; missing manifest freshness inputs; missing, malformed, future,
-   and over-age post-retrieval source timestamps; wrong repository root; wrong
-   Git common directory; wrong worktree path or identity; `main`; detached or
-   wrong branch; checkout-to-packet head mismatch; absent approval, missing
-   `human_approved`, and `human_approved: false` returning `APPROVAL_REQUIRED`;
-   malformed approval; missing or invalid exact-head approval evidence returning
-   `APPROVAL_HEAD_MISMATCH`; valid affirmative approval worktree/head or digest
-   drift returning `PACKET_APPROVAL_MISMATCH`; approval accepted without a
-   trusted-time expiry check; approval attempted or `approved_at` recorded after
-   expiry; missing, malformed, incorrectly bound, or already elapsed expiry;
-   `executing_at` or `validated_at` after expiry; rendering that starts before
-   expiry and finishes after expiry; missing trusted-time transition checks;
-   authority conflict; UNKNOWN; invalid source mode; and forbidden operations.
+   and over-age post-retrieval source timestamps; wrong repository root, common
+   directory, worktree path or identity, `main`, detached or wrong branch, and
+   head mismatch; staged, unstaged, or untracked changes before approval or
+   rendering; non-`deny_all` untracked policy; clean-state digest drift;
+   absent approval, missing `human_approved`, and `human_approved: false`
+   returning `APPROVAL_REQUIRED`; malformed approval; missing or invalid
+   exact-head approval evidence returning `APPROVAL_HEAD_MISMATCH`; missing or
+   mismatched `approved_content_digest`; excluded-field mutation after approval;
+   valid approval packet/content/worktree/head drift returning
+   `PACKET_APPROVAL_MISMATCH`; approval accepted without a trusted-time expiry
+   check; approval attempted or `approved_at` recorded after expiry; missing,
+   malformed, incorrectly bound, or already elapsed expiry; `executing_at` or
+   `validated_at` after expiry; rendering that starts before expiry and finishes
+   after expiry; missing trusted-time transition checks; authority conflict;
+   UNKNOWN; invalid source mode; and forbidden operations.
 9. `examples/showcase-ecommerce/` — judge-facing output and proof only after the
    implementation and test lane is approved.
 
@@ -407,25 +448,25 @@ npm run demo:json
 The one-file proof must include:
 
 - repository, branch, absolute worktree path and identity, Git common directory,
-  owner, lane status, allowed path, base SHA, head SHA, and trusted authority;
+  exact head, owner, lane status, allowed path, base SHA, and trusted authority;
 - exact changed-path output, Gatekeeper result, and `git diff --check`;
 - package command results and exit codes;
 - non-empty artifact byte count;
 - canonical manifest verification and `DIGEST_INVALID`; deterministic budget
   validation and `BUDGET_EXCEEDED`; manifest ordering; immutable-skill gate;
   manifest-level pre-retrieval freshness inputs; post-retrieval per-record
-  freshness validation; checkout-to-packet worktree validation; separate
-  affirmative approval binding; trusted-time approval-transition expiry;
-  approval-before-render; continuous later execution-transition expiry;
-  authority behavior; and output contracts reviewed;
+  freshness validation; checkout identity and clean-state validation before
+  approval and rendering; separate packet/content approval snapshots;
+  trusted-time approval-transition expiry; continuous later execution-transition
+  expiry; authority behavior; and output contracts reviewed;
 - deterministic blocked evidence for missing, malformed, and mismatched manifest
   digest; every budget class; wrong repository root, common directory, worktree,
-  `main`, wrong or detached branch, and checkout-to-packet head mismatch;
+  `main`, wrong or detached branch, head mismatch, staged/unstaged/untracked
+  entries, and clean-state digest mismatch;
 - separate deterministic blocked evidence for absent approval, missing or false
   `human_approved`, malformed approval, missing or invalid exact-head approval
-  evidence, valid affirmative approval worktree/head drift, and
-  approval/packet digest divergence using the corresponding approval-specific
-  codes;
+  evidence, missing/mismatched `approved_content_digest`, excluded-field packet
+  mutation, and valid approval snapshot drift using the corresponding codes;
 - expiry proof binding packet `expires_at` to trusted-time
   `approval_expiry_checked_at` before status becomes `approved`, `approved_at`,
   every later expiry check, `executing_at`, and `validated_at`, plus blocked cases
@@ -456,11 +497,12 @@ allowlist. Its packet must require:
   `checked_at - source_updated_at` validation after retrieval;
 - exact source, context, packet, approval, expiry, and proof digests;
 - canonical repository root, Git common directory, absolute registered worktree
-  identity, a non-`main` approved branch, and exact head validated against the
-  immutable packet before approval;
+  identity, a non-`main` approved branch, exact head, `untracked_policy:
+  deny_all`, and zero staged, unstaged, or untracked entries validated before
+  approval and rendering;
 - affirmative `human_approved: true` approval separately bound to reviewer,
-  disposition, packet digest, approved worktree identity, and approved head,
-  with shared approval-specific failure-code semantics;
+  disposition, `approved_packet_digest`, `approved_content_digest`, approved
+  clean-state digest, worktree identity, and approved head;
 - trusted current-time validation before status becomes `approved`, at
   `approved_at`, before rendering, at `executing_at`, at render completion, at
   `validated_at`, and immediately before final proof/emission, with every
@@ -468,8 +510,9 @@ allowlist. Its packet must require:
 - no DataHub or MG MCP writes, production migration, or deployment;
 - deterministic success and blocked outputs;
 - independent review of code, fixture provenance, skill supply chain, privacy,
-  manifest integrity, budgets, freshness stage, worktree packet binding,
-  approval binding, approval and execution-transition expiry, and proof; and
+  manifest integrity, budgets, freshness stage, worktree identity/clean state,
+  packet/content approval binding, approval and execution-transition expiry, and
+  proof; and
 - a stop at proof return or any safety-critical UNKNOWN, digest, budget, conflict,
   freshness, skill, worktree, approval, or expiry failure.
 
@@ -495,17 +538,17 @@ This planning lane is done when:
 1. this artifact is non-empty, reviewable, and the only changed path;
 2. objective, judge value, reuse, canonical workflow, manifest integrity,
    deterministic budgets, manifest ordering, immutable skill, manifest-level and
-   post-retrieval freshness stages, checkout-to-packet worktree identity,
-   separate affirmative approval binding, trusted-time approval-transition
-   expiry, approval-before-render, continuous later execution-transition expiry,
+   post-retrieval freshness stages, checkout identity and clean-state binding,
+   packet/content approval snapshots, trusted-time approval-transition expiry,
+   approval-before-render, continuous later execution-transition expiry,
    authority, outputs, future paths, validation, proof, blocked scope,
    implementation proposal, and stop condition are explicit;
 3. unverified datapack, live DataHub, skill, tool, and executable values remain
    `UNKNOWN` and block safety-critical paths;
 4. read-only, fixture-first, manifest-integrity, bounded retrieval,
-   pre-retrieval supply-chain, post-retrieval freshness, non-`main` worktree,
-   affirmative human approval, approval-time and continuous later expiry, and
-   no-write boundaries are preserved;
+   pre-retrieval supply-chain, post-retrieval freshness, non-`main` clean
+   worktree, full-content human approval, approval-time and continuous later
+   expiry, and no-write boundaries are preserved;
 5. Gatekeeper, non-empty, containment, diff, typecheck, test, and demo validation
    pass;
 6. the commit is pushed to the approved branch;
