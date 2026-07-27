@@ -29,8 +29,9 @@ Demonstrate one narrow, reproducible metadata-aware development flow:
 
 The judge-visible causal chain is:
 
-1. validate the request, source mode, context budgets, immutable selected-skill
-   binding, and manifest-level source evidence before retrieval;
+1. validate the request, source mode, context budgets, canonical manifest
+   digest, immutable selected-skill binding, and manifest-level source evidence
+   before retrieval;
 2. retrieve and normalize schema, bounded lineage, ownership, domain, tags,
    glossary, quality, standards, provenance, and authority state;
 3. validate per-record source freshness after retrieval and before approval;
@@ -61,8 +62,8 @@ surfaces instead of creating a second governance model:
 - `docs/datahub-skill-execution-architecture.md` supplies the four-plane,
   read-only, proof, failure-code, and maturity-boundary model.
 - `docs/datahub-mg-mcp-skill-bridge-architecture.md` supplies the
-  non-reorderable manifest, immutable skill, freshness, worktree identity,
-  packet approval, expiry, and shared failure-code contracts.
+  non-reorderable manifest, canonical digest, immutable skill, freshness,
+  worktree identity, packet approval, expiry, and shared failure-code contracts.
 - The existing `docs/fixtures/showcase-ecommerce/*` artifacts define planning
   vocabulary, metadata dimensions, budgets, public-safety rules, and expected
   blocked behavior. They are planning contracts, not runtime authority.
@@ -92,38 +93,47 @@ The workflow is non-reorderable:
    manifest digest;
 3. before reading any fixture record, validate manifest budgets, source binding,
    content digest, manifest-level deterministic freshness inputs
-   (`max_freshness_age` and `checked_at`), and immutable selected-skill identity;
-4. return `BUDGET_EXCEEDED` before retrieval when any entity, lineage, edge,
+   (`max_freshness_age` and `checked_at`), immutable selected-skill identity,
+   and the canonical `manifest_digest`;
+4. return `DIGEST_INVALID` before retrieval when canonicalization fails or the
+   `manifest_digest` is missing, malformed, or mismatched;
+5. return `BUDGET_EXCEEDED` before retrieval when any entity, lineage, edge,
    record, token, freshness-age, or timeout budget is invalid or exceeded;
-5. fail with `SKILL_BINDING_FAILED` before retrieval when the selected skill ID,
+6. fail with `SKILL_BINDING_FAILED` before retrieval when the selected skill ID,
    canonical source, exact version, license, or content digest is missing,
    `UNKNOWN`, changed, or does not match the approved registry record;
-6. resolve exactly one target dataset and its schema;
-7. resolve at most one downstream lineage path at depth one;
-8. resolve ownership, domain, tags, glossary, quality, and approved standards;
-9. after all required records are retrieved, require attributable
-   `source_updated_at` for every safety-critical record, calculate
-   `checked_at - source_updated_at`, and return `FRESHNESS_EXCEEDED` for missing,
-   malformed, future-dated, or over-age evidence;
-10. screen all retrieved text as untrusted data only;
-11. build canonical context and bind it back to the validated packet;
-12. resolve the current repository root, Git common directory, absolute worktree
+7. resolve exactly one target dataset and its schema;
+8. resolve at most one downstream lineage path at depth one;
+9. resolve ownership, domain, tags, glossary, quality, and approved standards;
+10. after all required records are retrieved, require attributable
+    `source_updated_at` for every safety-critical record, calculate
+    `checked_at - source_updated_at`, and return `FRESHNESS_EXCEEDED` for missing,
+    malformed, future-dated, or over-age evidence;
+11. screen all retrieved text as untrusted data only;
+12. build canonical context and bind it back to the validated packet;
+13. resolve the current repository root, Git common directory, absolute worktree
     path and identity, branch, and exact head from the checkout;
-13. compare every resolved checkout value only with the immutable packet
+14. compare every resolved checkout value only with the immutable packet
     worktree binding, reject `main`, a detached or missing branch, another
     repository clone, another worktree, a wrong branch, or a head mismatch, and
     return `WORKTREE_INVALID` before approval evaluation;
-14. separately validate screening bindings and affirmative packet approval,
+15. separately validate screening bindings and affirmative packet approval,
     including `human_approved: true`, reviewer identity, approval timestamp,
     disposition, approval digest, approved worktree identity and head, and
     current packet digest;
-15. validate that packet `expires_at` is present, timezone-aware, bound to the
+16. validate that packet `expires_at` is present, timezone-aware, bound to the
     packet and approval, and not elapsed at the deterministic execution check
     time; and
-16. render the proposal only when all prior gates pass; otherwise emit the
+17. render the proposal only when all prior gates pass; otherwise emit the
     deterministic blocked result.
 
-### 3.1 Bounded retrieval and deterministic freshness
+### 3.1 Manifest integrity, bounded retrieval, and deterministic freshness
+
+The `pre_retrieval_manifest` is canonicalized using the shared contract before
+retrieval. Its recorded `manifest_digest` must be present, syntactically valid,
+and equal the digest of the canonical manifest payload. Missing, malformed, or
+mismatched digest evidence, or failed canonicalization, stops retrieval with
+`DIGEST_INVALID`.
 
 The offline fixture must be byte-stable, network-free, public-safe, and
 canonically ordered. Local fixture keys are not DataHub entity IDs. Contract
@@ -139,8 +149,9 @@ an apparent zero-age success. Before retrieval, the manifest must provide and
 validate only:
 
 - a concrete ISO 8601 `max_freshness_age` duration;
-- a committed deterministic `checked_at` value; and
-- the fixture/source and content-digest bindings.
+- a committed deterministic `checked_at` value;
+- the fixture/source and content-digest bindings; and
+- the canonical `manifest_digest`.
 
 After the required records are retrieved, every safety-critical record must
 provide attributable `source_updated_at`. `retrievedAt` is retrieval evidence
@@ -221,13 +232,14 @@ of absence. Conflicting attributable records block the affected proposal.
 
 ### 5.1 Success output
 
-Only after budgets, manifest, immutable-skill, post-retrieval per-record
-freshness, screening, context, checkout-to-packet worktree identity,
-affirmative `human_approved: true` approval, and packet-expiry validation all
-pass, emit one stable JSON result containing:
+Only after manifest digest, budgets, manifest fields, immutable-skill,
+post-retrieval per-record freshness, screening, context, checkout-to-packet
+worktree identity, affirmative `human_approved: true` approval, and packet-expiry
+validation all pass, emit one stable JSON result containing:
 
 - `status: "proposal_ready"`;
 - the exact request and `OFFLINE_FIXTURE` source mode;
+- canonical manifest payload and verified `manifest_digest`;
 - immutable selected-skill identity and verified digest;
 - canonical context records with provenance, `source_updated_at`, observed age,
   and authority state;
@@ -240,9 +252,9 @@ pass, emit one stable JSON result containing:
 - the verified selected field, downstream relation or model, glossary meaning,
   and quality assertion;
 - deterministic SQL and matching dbt schema-test YAML proposal shapes; and
-- proof for budgets, fixture, skill, freshness stage, worktree packet binding,
-  approval binding, expiry, packet, context, commands, tests, changed paths,
-  warnings, and `executed_writes: []`.
+- proof for manifest digest, budgets, fixture, skill, freshness stage, worktree
+  packet binding, approval binding, expiry, packet, context, commands, tests,
+  changed paths, warnings, and `executed_writes: []`.
 
 Stable inputs must produce stable key, record, array, and serialization order.
 A successful result remains a proposal and does not authorize implementation,
@@ -251,11 +263,12 @@ deployment, production migration, or merge.
 ### 5.2 Fail-closed output
 
 Emit a stable blocked result instead of guessed SQL/YAML when any source mode,
-budget, manifest, immutable skill, post-retrieval freshness, screening,
-checkout-to-packet worktree identity, affirmative approval, expiry, authority,
-command, or safety-critical `UNKNOWN` gate fails. The exact applicable failure
-code includes:
+manifest digest, budget, manifest field, immutable skill, post-retrieval
+freshness, screening, checkout-to-packet worktree identity, affirmative approval,
+expiry, authority, command, or safety-critical `UNKNOWN` gate fails. The exact
+applicable failure code includes:
 
+- `DIGEST_INVALID`;
 - `BUDGET_EXCEEDED`;
 - `SKILL_BINDING_FAILED`;
 - `FRESHNESS_EXCEEDED`;
@@ -284,8 +297,9 @@ response-body leakage, or secrets.
 These paths require a separately registered and approved implementation lane:
 
 1. `src/showcase-ecommerce/scenario.ts` — exact scenario selection, source-mode
-   policy, deterministic budget validation, manifest-level freshness inputs,
-   immutable-skill validation, authority, and failure codes.
+   policy, canonical manifest-digest verification, deterministic budget
+   validation, manifest-level freshness inputs, immutable-skill validation,
+   authority, and failure codes.
 2. `src/showcase-ecommerce/context.ts` — fixture/read-only loading, attribution,
    post-retrieval per-record `source_updated_at` validation, sanitization,
    provenance, and UNKNOWN records.
@@ -295,9 +309,9 @@ These paths require a separately registered and approved implementation lane:
    affirmative approval-to-packet/worktree/head validation; and packet expiry.
 4. `src/showcase-ecommerce/proposal.ts` — deterministic SQL/YAML rendering only
    after all gates pass, otherwise a blocked result.
-5. `src/showcase-ecommerce/proof.ts` — canonical budget, fixture, skill,
-   freshness-stage, worktree packet binding, approval binding, expiry, packet,
-   context, and digest evidence.
+5. `src/showcase-ecommerce/proof.ts` — canonical manifest-digest, budget, fixture,
+   skill, freshness-stage, worktree packet binding, approval binding, expiry,
+   packet, context, and digest evidence.
 6. `src/cli.ts` — an explicitly selected showcase command path that preserves
    existing generic behavior.
 7. `fixtures/showcase-ecommerce/context.json` and
@@ -305,14 +319,15 @@ These paths require a separately registered and approved implementation lane:
    license, freshness inputs, immutable skill record, sanitization, and an
    implementation-lane allowlist are approved.
 8. `tests/showcase-ecommerce/*.test.ts` — deterministic success and blocked cases
-   for every entity, lineage, edge, record, token, freshness-age, and timeout
-   budget excess returning `BUDGET_EXCEEDED`; missing or changed skill fields;
-   missing manifest freshness inputs; missing, malformed, future, and over-age
-   post-retrieval source timestamps; wrong repository root; wrong Git common
-   directory; wrong worktree path or identity; `main`; detached or wrong branch;
-   checkout-to-packet head mismatch; absent approval, missing `human_approved`,
-   and `human_approved: false` returning `APPROVAL_REQUIRED`; malformed approval;
-   missing or invalid exact-head approval evidence returning
+   for missing, malformed, and mismatched canonical manifest digest returning
+   `DIGEST_INVALID`; every entity, lineage, edge, record, token, freshness-age,
+   and timeout budget excess returning `BUDGET_EXCEEDED`; missing or changed
+   skill fields; missing manifest freshness inputs; missing, malformed, future,
+   and over-age post-retrieval source timestamps; wrong repository root; wrong
+   Git common directory; wrong worktree path or identity; `main`; detached or
+   wrong branch; checkout-to-packet head mismatch; absent approval, missing
+   `human_approved`, and `human_approved: false` returning `APPROVAL_REQUIRED`;
+   malformed approval; missing or invalid exact-head approval evidence returning
    `APPROVAL_HEAD_MISMATCH`; valid affirmative approval worktree/head or digest
    drift returning `PACKET_APPROVAL_MISMATCH`; missing, malformed, incorrectly
    bound, and elapsed expiry; authority conflict; UNKNOWN; invalid source mode;
@@ -348,14 +363,15 @@ The one-file proof must include:
 - exact changed-path output, Gatekeeper result, and `git diff --check`;
 - package command results and exit codes;
 - non-empty artifact byte count;
-- deterministic budget validation and `BUDGET_EXCEEDED`; manifest ordering;
-  immutable-skill gate; manifest-level pre-retrieval freshness inputs;
-  post-retrieval per-record freshness validation; checkout-to-packet worktree
-  validation; separate affirmative approval binding; approval-before-render;
-  packet expiry; authority behavior; and output contracts reviewed;
-- deterministic blocked evidence for every budget class, wrong repository root,
-  common directory, worktree, `main`, wrong or detached branch, and
-  checkout-to-packet head mismatch;
+- canonical manifest verification and `DIGEST_INVALID`; deterministic budget
+  validation and `BUDGET_EXCEEDED`; manifest ordering; immutable-skill gate;
+  manifest-level pre-retrieval freshness inputs; post-retrieval per-record
+  freshness validation; checkout-to-packet worktree validation; separate
+  affirmative approval binding; approval-before-render; packet expiry; authority
+  behavior; and output contracts reviewed;
+- deterministic blocked evidence for missing, malformed, and mismatched manifest
+  digest; every budget class; wrong repository root, common directory, worktree,
+  `main`, wrong or detached branch, and checkout-to-packet head mismatch;
 - separate deterministic blocked evidence for absent approval, missing or false
   `human_approved`, malformed approval, missing or invalid exact-head approval
   evidence, valid affirmative approval worktree/head drift, and
@@ -377,6 +393,8 @@ allowlist. Its packet must require:
 
 - `OFFLINE_FIXTURE` as the first executable mode;
 - no network, credentials, private, or production metadata;
+- canonical manifest-digest verification with `DIGEST_INVALID` for missing,
+  malformed, or mismatched evidence;
 - deterministic bounded retrieval with `BUDGET_EXCEEDED` for any exceeded
   entity, lineage, edge, record, token, freshness-age, or timeout budget;
 - immutable skill ID, source, version, license, and digest before retrieval;
@@ -394,9 +412,9 @@ allowlist. Its packet must require:
 - no DataHub or MG MCP writes, production migration, or deployment;
 - deterministic success and blocked outputs;
 - independent review of code, fixture provenance, skill supply chain, privacy,
-  budgets, freshness stage, worktree packet binding, approval binding, expiry,
-  and proof; and
-- a stop at proof return or any safety-critical UNKNOWN, budget, conflict,
+  manifest integrity, budgets, freshness stage, worktree packet binding,
+  approval binding, expiry, and proof; and
+- a stop at proof return or any safety-critical UNKNOWN, digest, budget, conflict,
   freshness, skill, worktree, approval, or expiry failure.
 
 ## 9. Blocked scope
@@ -419,17 +437,17 @@ governance lane.
 This planning lane is done when:
 
 1. this artifact is non-empty, reviewable, and the only changed path;
-2. objective, judge value, reuse, canonical workflow, deterministic budgets,
-   manifest ordering, immutable skill, manifest-level and post-retrieval
-   freshness stages, checkout-to-packet worktree identity, separate affirmative
-   approval binding, approval-before-render, expiry, authority, outputs, future
-   paths, validation, proof, blocked scope, implementation proposal, and stop
-   condition are explicit;
+2. objective, judge value, reuse, canonical workflow, manifest integrity,
+   deterministic budgets, manifest ordering, immutable skill, manifest-level and
+   post-retrieval freshness stages, checkout-to-packet worktree identity,
+   separate affirmative approval binding, approval-before-render, expiry,
+   authority, outputs, future paths, validation, proof, blocked scope,
+   implementation proposal, and stop condition are explicit;
 3. unverified datapack, live DataHub, skill, tool, and executable values remain
    `UNKNOWN` and block safety-critical paths;
-4. read-only, fixture-first, bounded retrieval, pre-retrieval supply-chain,
-   post-retrieval freshness, non-`main` worktree, affirmative human approval,
-   expiry, and no-write boundaries are preserved;
+4. read-only, fixture-first, manifest-integrity, bounded retrieval,
+   pre-retrieval supply-chain, post-retrieval freshness, non-`main` worktree,
+   affirmative human approval, expiry, and no-write boundaries are preserved;
 5. Gatekeeper, non-empty, containment, diff, typecheck, test, and demo validation
    pass;
 6. the commit is pushed to the approved branch;
