@@ -107,9 +107,12 @@ Selection is exact-match and ordered:
 11. build canonical context values and bind them back to the validated packet;
 12. validate screening bindings and affirmative packet approval, including the
     reviewer identity, approval timestamp, disposition, approval digest, exact
-    approved worktree head, and current packet digest; and
-13. render the proposal only when approval validation passes, otherwise emit the
-    deterministic blocked result.
+    approved worktree head, and current packet digest;
+13. validate that packet `expires_at` is present, timezone-aware, correctly bound
+    to the packet and approval, and not elapsed at the deterministic execution
+    check time; and
+14. render the proposal only when approval and expiry validation pass, otherwise
+    emit the deterministic blocked result.
 
 The offline fixture must be byte-stable, network-free, public-safe, and
 deterministically ordered. Local fixture keys are not DataHub entity IDs.
@@ -158,7 +161,10 @@ human approval tied to the exact packet digest and approved worktree head. An
 absent approval returns `APPROVAL_REQUIRED`; invalid reviewer, timestamp, or
 disposition evidence returns `APPROVAL_INVALID`; an approved-head mismatch
 returns `APPROVAL_HEAD_MISMATCH`; and approval/packet digest divergence returns
-`PACKET_APPROVAL_MISMATCH`. In every blocked case, `proposal` remains `null` and
+`PACKET_APPROVAL_MISMATCH`. The worker must also validate a timezone-aware
+packet `expires_at` against the deterministic execution check time before
+rendering. A missing, malformed, incorrectly bound, or elapsed expiry returns
+`PACKET_EXPIRED`. In every blocked case, `proposal` remains `null` and
 `executed_writes` remains empty.
 
 ## 4. Authority-state behavior
@@ -184,8 +190,8 @@ records block the affected proposal.
 ### 5.1 Success output
 
 Only after immutable skill binding, manifest validation, freshness validation,
-screening, context binding, and affirmative packet approval all pass, emit one
-stable JSON result containing:
+screening, context binding, affirmative packet approval, and packet-expiry
+validation all pass, emit one stable JSON result containing:
 
 - `status: "proposal_ready"`;
 - the exact request and `OFFLINE_FIXTURE` source mode;
@@ -219,15 +225,16 @@ human decisions.
 
 If a source mode is blocked, immutable skill binding fails, a budget is
 exceeded, freshness evidence is missing or over age, screening fails, packet
-approval is absent or invalid, a required record conflicts, a tool or command is
-unauthorized, or any safety-critical field is `UNKNOWN`, emit a stable blocked
-result rather than guessed SQL/YAML:
+approval is absent or invalid, the packet expiry is missing, malformed,
+incorrectly bound, or elapsed, a required record conflicts, a tool or command
+is unauthorized, or any safety-critical field is `UNKNOWN`, emit a stable
+blocked result rather than guessed SQL/YAML:
 
 - `status: "blocked"`;
 - the exact applicable stable failure code, including
   `SKILL_BINDING_FAILED`, `FRESHNESS_EXCEEDED`, `APPROVAL_REQUIRED`,
   `APPROVAL_INVALID`, `APPROVAL_HEAD_MISMATCH`,
-  `PACKET_APPROVAL_MISMATCH`, `SOURCE_MODE_BLOCKED`,
+  `PACKET_APPROVAL_MISMATCH`, `PACKET_EXPIRED`, `SOURCE_MODE_BLOCKED`,
   `AUTHORITY_CONFLICT`, `RETRIEVAL_EVIDENCE_INVALID`,
   `FORBIDDEN_OPERATION_ATTEMPTED`, `SCOPE_VIOLATION`, or
   `PROOF_INCOMPLETE`;
@@ -254,9 +261,10 @@ lane; they are not writable in this planning lane:
 2. `src/showcase-ecommerce/context.ts` — fixture/read-only context loading,
    required metadata dimensions, attribution, `source_updated_at`, sanitization,
    and UNKNOWN records.
-3. `src/showcase-ecommerce/approval.ts` — screening-to-packet binding and
+3. `src/showcase-ecommerce/approval.ts` — screening-to-packet binding,
    affirmative approval validation against reviewer identity, disposition,
-   approval digest, packet digest, and exact approved worktree head.
+   approval digest, packet digest, and exact approved worktree head, plus a
+   timezone-aware and unelapsed packet-expiry check before rendering.
 4. `src/showcase-ecommerce/proposal.ts` — deterministic SQL/YAML rendering only
    after approval validation, or a blocked result with no executable
    substitution from unknown values.
@@ -272,7 +280,8 @@ lane; they are not writable in this planning lane:
    sanitization, and a new implementation-lane allowlist are approved.
 8. `tests/showcase-ecommerce/*.test.ts` — deterministic success; missing or
    changed skill fields; missing, malformed, future, and over-age
-   `source_updated_at`; missing/invalid approval and head/digest mismatch; each
+   `source_updated_at`; missing/invalid approval and head/digest mismatch;
+   missing, malformed, incorrectly bound, and elapsed packet expiry; each
    blocking authority state; UNKNOWN propagation; conflict; budget; invalid
    source mode; and forbidden-operation cases.
 9. `examples/showcase-ecommerce/` — judge-facing output and proof only after
@@ -339,13 +348,16 @@ example files. The packet must require:
 - `humanApprovalRequired: true`, with affirmative approval validated before
   proposal rendering against reviewer identity, disposition, packet digest,
   and exact approved worktree head;
+- a timezone-aware packet `expires_at` bound to the packet and approval, with a
+  deterministic execution check proving that it has not expired before
+  rendering;
 - no DataHub or MG MCP write tools;
 - no production dbt migration or deployment;
 - deterministic success and blocked outputs;
 - an independent reviewer for code, fixture provenance, skill supply chain,
   privacy, approval evidence, and proof; and
 - a stop at proof return or any safety-critical UNKNOWN, conflict, freshness,
-  skill-binding, or approval failure.
+  skill-binding, approval, or packet-expiry failure.
 
 The optional isolated read-only mode is a later, separately approved increment,
 not a reason to delay or weaken the offline proof.
