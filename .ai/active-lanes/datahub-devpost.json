@@ -81,6 +81,17 @@
         "docs/fixtures/showcase-ecommerce/expected-proof-summary.yaml"
       ],
       "note": "Planning-only lane for defining the deterministic showcase-ecommerce fixture contract and first metadata-aware dbt migration scenario. No runtime implementation, connector changes, dependency changes, deployment, credentials, private data, DataHub writes, or MG MCP writes are authorized.\n\nCloseout verified through PR #9. Final reviewed head d111d3f2e67827625cbb8c2f7a66e38ff1c015b1 merged as b9b61ddb4da1284b83ee72d5eb42d36f509a0af5 after exact-head CI, Codex repair and thread resolution, Reviewer Disposition, and verified merge. Runtime implementation remains unauthorized."
+    },
+    {
+      "id": "datahub-showcase-ecommerce-offline-slice-plan",
+      "status": "PLANNING_ONLY",
+      "durable_branch": "plan/datahub-showcase-ecommerce-offline-slice",
+      "owner": "datahub-offline-slice-planning-owner",
+      "artifact": "docs/plans/showcase-ecommerce-offline-slice-plan.md",
+      "allowed_paths": [
+        "docs/plans/showcase-ecommerce-offline-slice-plan.md"
+      ],
+      "note": "Proposed planning-only lane for one deterministic fixture-first slice from synthetic showcase-ecommerce metadata through governed context, bounded work packet, safe customer-email proposal or blocked result, and reviewable proof. The single allowed path is the declared planning artifact because existing CLI, adapter, work-packet, fixture, test, example, and documentation surfaces were inspected read-only; runtime files are not writable in this lane. Live DataHub connectivity, credentials, private endpoints, DataHub writes, MG MCP writes, MCP server implementation, deployment, IAM, billing, workflow changes, dependency changes, production dbt changes, and autonomous merge remain blocked."
     }
   ]
 }
