@@ -195,6 +195,7 @@ content_handling:
   instruction_trust: data_only
   sanitization_status: pending|pass|failed
   injection_scan_status: pending|pass|failed
+  validation: pass|fail
   quarantined_records: []
 ```
 
@@ -331,9 +332,48 @@ validation: []
 stop_condition: stop at proof return or any UNKNOWN/conflict affecting safety
 expires_at: <ISO-8601>
 screening:
+  instruction_trust: data_only
   sanitization_status: pending|pass|failed
   injection_scan_status: pending|pass|failed
   validation: pass|fail
+  quarantined_records: []
+approval_digest_payload:
+  schema_name: governed_packet_approval_payload
+  schema_version: "1.0"
+  packet_record_id: <packet-stable-id>
+  request_id: <request-id>
+  objective: safe dbt schema migration
+  source_mode: OFFLINE_FIXTURE|ISOLATED_DATAHUB_READ_ONLY
+  source_mode_policy: allowed
+  context_record_id: <context-record-id>
+  context_content_digest: sha256:<64-lowercase-hex>
+  pre_retrieval_manifest_digest: sha256:<64-lowercase-hex>
+  repository:
+    base_commit: <40-hex>
+    branch: <non-main-branch>
+    worktree:
+      identity: <validated-absolute-worktree-path-and-git-common-dir>
+      path: <validated-absolute-worktree-path>
+      head_sha: <40-hex>
+      repository_root: <validated-absolute-repository-root>
+      common_dir: <validated-absolute-git-common-directory>
+    writable_paths: []
+    readable_paths: []
+  datahub_facts_relied_on: []
+  mg_mcp_records_relied_on: []
+  authorized_tools: []
+  denied_tools: []
+  allowed_commands: []
+  required_artifacts: []
+  validation: []
+  stop_condition: <stop-condition>
+  expires_at: <ISO-8601>
+  screening:
+    instruction_trust: data_only
+    sanitization_status: pending|pass|failed
+    injection_scan_status: pending|pass|failed
+    validation: pass|fail
+    quarantined_records: []
 approval:
   required: true
   human_approved: false
@@ -342,6 +382,7 @@ approval:
   disposition: null
   approved_head_sha: null
   approved_packet_digest: null
+  approved_content_digest: null
   validation: pass|fail
 ```
 
@@ -352,12 +393,33 @@ the following are mandatory: affirmative `human_approved: true`, a non-empty
 `reviewer_identity`, an `approved_at` timestamp, an allowed reviewer
 `disposition`, and `approved_head_sha` equal to the exact validated local
 worktree `head_sha`. A missing, stale, or mismatched approval blocks execution.
-Approval must also carry `approved_packet_digest` equal to the packet's current
-`content_digest`. If any packet content changes, including a change to scope,
-tools, source mode, manifest, or expiry, the prior approval is invalidated:
+
+`approval_digest_payload` is the immutable pre-approval payload. It is the exact
+object shown in the packet schema, with `packet_record_id` equal to the packet
+`record_id`, `pre_retrieval_manifest_digest` equal to the manifest digest, and
+the payload `screening` equal to the packet `screening`. The payload's
+`schema_name` and `schema_version` identify this payload format; the payload
+does not contain a digest of itself or any approval fields.
+`approved_packet_digest` is the RFC 8785 JCS SHA-256 digest of this payload
+object, not a digest of the packet record and not a digest of `content_digest`.
+The exact excluded packet fields are
+`schema_name`, `schema_version`, `created_at`, `created_by`, `status`,
+`authority_status`, `execution_status`, `retrieval_status`, `failures`,
+`content_digest`, `supersedes`, `related_artifacts`,
+`approval_digest_payload`, and `approval`. No excluded field may be used to
+reconstruct the approval payload.
+
+`approved_content_digest` records the packet `content_digest` at approval time.
+The packet and proof approval bindings must each carry the same
+`approved_packet_digest` payload digest, and each must carry the same
+`approved_content_digest` snapshot. If any packet content changes, including a
+change to an excluded field, the current `content_digest` no longer equals
+`approved_content_digest`; the prior approval is invalidated:
 `human_approved` becomes false, approval identity, timestamp, disposition,
-approved head, and approved packet digest are cleared, and execution is blocked
-with `PACKET_APPROVAL_MISMATCH` until the packet is re-approved.
+approved head, approved packet digest, and approved content digest are cleared,
+and execution is blocked with `PACKET_APPROVAL_MISMATCH` until the packet is
+re-approved. A mutation to any payload field also changes
+`approved_packet_digest` and invalidates the approval.
 
 The packet may authorize only `OFFLINE_FIXTURE` or
 `ISOLATED_DATAHUB_READ_ONLY`. `PRIVATE_OR_PRODUCTION_DATAHUB` is always
@@ -367,6 +429,11 @@ The packet may authorize only `OFFLINE_FIXTURE` or
 be `pass`, with `screening.validation: pass`, before approval or execution;
 pending or failed screening produces `SCREENING_REQUIRED` or
 `SCREENING_FAILED` and blocks progression.
+
+Before packet approval, `packet.screening` must equal the context
+`content_handling` values for `instruction_trust`, `sanitization_status`,
+`injection_scan_status`, `validation`, and `quarantined_records`. This binding
+is required even when the selected source mode is `OFFLINE_FIXTURE`.
 
 The `pre_retrieval_manifest` is validated before retrieval begins. Its
 `context_budget` must be complete before the first query, its
@@ -534,9 +601,11 @@ unknowns:
     blocking: true|false
     next_check: <permitted-validation-step>
 screening:
+  instruction_trust: data_only
   sanitization_status: pending|pass|failed
   injection_scan_status: pending|pass|failed
   validation: pass|fail
+  quarantined_records: []
 tool_inventory:
   server_id: <id-or-UNKNOWN>
   server_version: <version-or-UNKNOWN>
@@ -563,6 +632,7 @@ approval:
   disposition: null
   approved_head_sha: null
   approved_packet_digest: null
+  approved_content_digest: null
   validation: pass|fail
 worktree:
   identity: <validated-absolute-worktree-path-and-git-common-dir>
@@ -644,10 +714,13 @@ equal the retrieved context record.
 The proof `context_budget.limits` must equal the packet
 `pre_retrieval_manifest.context_budget` field-for-field. Every proof
 `approval` field must equal the packet's `approval` field, including
-`approved_packet_digest`, and `approval.approved_head_sha` must equal both the
-packet's validated worktree head and the proof's validated worktree head.
-`approval.approved_packet_digest` must equal the packet's current
-`content_digest`; otherwise proof fails with `PACKET_APPROVAL_MISMATCH`.
+`approved_packet_digest` and `approved_content_digest`, and
+`approval.approved_head_sha` must equal both the packet's validated worktree
+head and the proof's validated worktree head. `approval.approved_packet_digest`
+must equal the packet's immutable `approval_digest_payload` JCS digest, and
+`approval.approved_content_digest` must equal the packet `content_digest`
+captured at approval time; otherwise proof fails with
+`PACKET_APPROVAL_MISMATCH`.
 Connection evidence is conditional: for `OFFLINE_FIXTURE`, the proof's fixture
 record ID and content digest must equal the packet manifest's fixture binding
 and the context record's fixture binding, while isolated connection fields are
@@ -663,7 +736,13 @@ license, and content digest, with `binding_validation: pass`; any mismatch
 fails with `SKILL_BINDING_FAILED`.
 `context_evidence.source_mode_policy` must be `allowed`; a private or production
 source fails proof acceptance with `SOURCE_MODE_BLOCKED`. The proof's
-`screening.validation` must be `pass`, with both screening statuses `pass`.
+`screening` must equal packet `screening`, and packet `screening` must equal
+the context `content_handling` object field-for-field across
+`instruction_trust`, `sanitization_status`, `injection_scan_status`,
+`validation`, and `quarantined_records`. All three representations must have
+`instruction_trust: data_only`, both scan statuses `pass`, `validation: pass`,
+and an empty `quarantined_records`; any pending or failed context screening
+blocks proof with `SCREENING_REQUIRED` or `SCREENING_FAILED`.
 `scope_check.unauthorized_paths` must be empty and
 `scope_check.containment_validation` must be `pass` only when every
 `scope_check.changed_paths` entry is a literal member of
