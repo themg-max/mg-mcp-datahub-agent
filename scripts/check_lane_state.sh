@@ -187,8 +187,56 @@ if (Array.isArray(lane.allowed_paths)) {
 ' "$authority_registry" "$expected_slug" "$branch" "$root" "$authority_commit"
 }
 
-resolve_authority
+# Validate committed changes between authority_commit and HEAD against allowed_paths
+# Returns 0 on pass, exits with 14 for out-of-scope, 15 for collection/parsing error
+validate_committed_scope() {
+  if [ -z "$authority_commit" ] || [ "$authority_commit" = "NONE" ]; then
+    printf '%s\n' 'ERROR trusted authority commit is unavailable for committed-scope validation' >&2
+    exit 15
+  fi
+  committed_file="$(mktemp "${TMPDIR:-/tmp}/gatekeeper-committed.XXXXXX")" || {
+    printf '%s\n' 'ERROR unable to buffer committed-diff' >&2
+    exit 15
+  }
+  if ! git -C "$root" diff --name-status -z "$authority_commit" HEAD >"$committed_file" 2>/dev/null; then
+    rm -f "$committed_file"
+    printf '%s\n' 'ERROR unable to collect committed diff between authority and HEAD' >&2
+    exit 15
+  fi
+  committed_paths=()
+  while IFS= read -r -d '' status_code; do
+    case "${status_code:0:1}" in
+      R|C)
+        IFS= read -r -d '' src || { rm -f "$committed_file"; printf '%s\n' 'ERROR malformed committed-diff rename record' >&2; exit 15; }
+        IFS= read -r -d '' dst || { rm -f "$committed_file"; printf '%s\n' 'ERROR malformed committed-diff rename record' >&2; exit 15; }
+        committed_paths+=("$src")
+        committed_paths+=("$dst")
+        ;;
+      *)
+        IFS= read -r -d '' p || { rm -f "$committed_file"; printf '%s\n' 'ERROR malformed committed-diff record' >&2; exit 15; }
+        committed_paths+=("$p")
+        ;;
+    esac
+  done <"$committed_file"
+  rm -f "$committed_file"
 
+  for changed_path in "${committed_paths[@]}"; do
+    path_allowed=false
+    for allowed_path in "${allowed_paths[@]}"; do
+      if [ "$changed_path" = "$allowed_path" ]; then
+        path_allowed=true
+        break
+      fi
+    done
+    if [ "$path_allowed" != true ]; then
+      printf 'ERROR committed path is outside the active lane scope: %s\n' "$changed_path" >&2
+      exit 14
+    fi
+  done
+  return 0
+}
+
+resolve_authority
 lane_id="NONE"
 lane_status="UNKNOWN"
 lane_owner=""
@@ -262,6 +310,7 @@ if [ "$mode" = "mutation" ]; then
     exit 15
   fi
 
+  # Collect worktree status (staged, unstaged, untracked) using fail-closed semantics
   status_file="$(mktemp "${TMPDIR:-/tmp}/gatekeeper-status.XXXXXX")" || {
     printf '%s\n' 'ERROR unable to buffer Git worktree status' >&2
     exit 15
@@ -274,11 +323,14 @@ if [ "$mode" = "mutation" ]; then
     exit 15
   fi
 
+  # Parse worktree status into changed_paths. Porcelain v1 -z entries are NUL-delimited
   changed_paths=()
   while IFS= read -r -d '' status_record; do
+    # status_record structure: XY<space>path (but with -z the record contains the two-letter status and a space then path)
     status_code="${status_record:0:2}"
     changed_paths+=("${status_record:3}")
     if [[ "$status_code" == *R* || "$status_code" == *C* ]]; then
+      # For renames/copies the porcelain output pairs source and destination as subsequent NUL entries
       IFS= read -r -d '' source_path || {
         rm -f "$status_file"
         printf '%s\n' 'ERROR malformed Git porcelain rename record' >&2
@@ -289,7 +341,48 @@ if [ "$mode" = "mutation" ]; then
   done <"$status_file"
   rm -f "$status_file"
 
-  for changed_path in "${changed_paths[@]}"; do
+  # Collect committed changes between trusted authority_commit and HEAD using NUL-delimited diff to preserve spaces and rename pairs
+  committed_file="$(mktemp "${TMPDIR:-/tmp}/gatekeeper-committed.XXXXXX")" || {
+    printf '%s\n' 'ERROR unable to buffer committed-diff' >&2
+    exit 15
+  }
+  # Use --name-status -z to get status codes and NUL-separated path records; this preserves rename pairs and spaces
+  if ! git -C "$root" diff --name-status -z "$authority_commit" HEAD >"$committed_file" 2>/dev/null; then
+    rm -f "$committed_file"
+    printf '%s\n' 'ERROR unable to collect committed diff between authority and HEAD' >&2
+    exit 15
+  fi
+
+  committed_paths=()
+  # Parse NUL-delimited name-status records
+  while IFS= read -r -d '' status_code; do
+    case "${status_code:0:1}" in
+      R|C)
+        # rename/copy: next two NUL entries are source and destination
+        IFS= read -r -d '' src || { rm -f "$committed_file"; printf '%s\n' 'ERROR malformed committed-diff rename record' >&2; exit 15; }
+        IFS= read -r -d '' dst || { rm -f "$committed_file"; printf '%s\n' 'ERROR malformed committed-diff rename record' >&2; exit 15; }
+        committed_paths+=("$src")
+        committed_paths+=("$dst")
+        ;;
+      *)
+        # single-path records (A, M, D, etc.)
+        IFS= read -r -d '' p || { rm -f "$committed_file"; printf '%s\n' 'ERROR malformed committed-diff record' >&2; exit 15; }
+        committed_paths+=("$p")
+        ;;
+    esac
+  done <"$committed_file"
+  rm -f "$committed_file"
+
+  # Form the union of committed_paths and worktree changed_paths (deduplicate)
+  declare -A effective_map
+  for p in "${committed_paths[@]}"; do effective_map["$p"]=1; done
+  for p in "${changed_paths[@]}"; do effective_map["$p"]=1; done
+
+  effective_paths=()
+  for p in "${!effective_map[@]}"; do effective_paths+=("$p"); done
+
+  # Validate every effective path literally against trusted allowed_paths
+  for changed_path in "${effective_paths[@]}"; do
     path_allowed=false
     for allowed_path in "${allowed_paths[@]}"; do
       if [ "$changed_path" = "$allowed_path" ]; then
@@ -298,10 +391,11 @@ if [ "$mode" = "mutation" ]; then
       fi
     done
     if [ "$path_allowed" != true ]; then
-      printf 'ERROR worktree path is outside the active lane scope: %s\n' "$changed_path" >&2
+      printf 'ERROR path is outside the active lane scope: %s\n' "$changed_path" >&2
       exit 14
     fi
   done
+
   printf '%s\n' 'result=PASS (validation only; no mutation performed)'
   exit 0
 fi
@@ -320,6 +414,15 @@ if [ "$mode" = "merge" ]; then
     printf 'ERROR merge authority is unavailable or invalid: %s\n' "${authority_error:-unknown authority error}" >&2
     exit 15
   fi
+
+  # Require committed-scope validation before merge may return success
+  if ! validate_committed_scope; then
+    # validate_committed_scope will exit with appropriate code on failure
+    # but in case it returns non-zero without exiting, fail closed with 15
+    printf '%s\n' 'ERROR committed-scope validation failed during merge' >&2
+    exit 15
+  fi
+
   if [[ "$GATEKEEPER_PR_NUMBER" =~ ^[0-9]+$ ]] && \
      [[ "$GATEKEEPER_EXPECTED_HEAD" =~ ^[0-9A-Fa-f]{40}$ ]] && \
      [[ "$GATEKEEPER_CURRENT_HEAD" = "$GATEKEEPER_EXPECTED_HEAD" ]] && \
