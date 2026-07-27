@@ -84,21 +84,41 @@ source_mode     = OFFLINE_FIXTURE
 Selection is exact-match and ordered:
 
 1. validate the source mode;
-2. validate the pre-retrieval manifest and content digest;
-3. resolve exactly one target dataset;
-4. resolve the target schema;
-5. resolve at most one downstream lineage path at depth one;
-6. resolve ownership;
-7. resolve domain, tags, glossary, quality, and approved standards;
-8. screen all retrieved text as data only;
-9. build canonical context and packet values; and
-10. render the proposal or blocked result.
+2. create the bounded packet and its embedded `pre_retrieval_manifest`, including
+   every context-budget value and the canonical manifest digest;
+3. validate manifest budgets, source binding, content digest, and deterministic
+   offline freshness before reading fixture records;
+4. resolve exactly one target dataset;
+5. resolve the target schema;
+6. resolve at most one downstream lineage path at depth one;
+7. resolve ownership;
+8. resolve domain, tags, glossary, quality, and approved standards;
+9. screen all retrieved text as data only;
+10. build canonical context values and bind them back to the validated packet;
+    and
+11. render the proposal or blocked result.
 
 The offline fixture must be byte-stable, network-free, public-safe, and
 deterministically ordered. Local fixture keys are not DataHub entity IDs.
 Budgets remain bounded at the contract values: eight entities, lineage depth
 one, two lineage edges, sixteen total records, 4,000 estimated tokens, and a
-30-second retrieval timeout. A fixture expectation is not a live DataHub fact.
+30-second retrieval timeout.
+
+The fixture contract currently records `max_freshness_age: UNKNOWN`; an
+implementation must not copy that value into the packet. For
+`OFFLINE_FIXTURE`, the deterministic freshness rule is:
+
+- serialize `max_freshness_age` as the duration `PT0S` in the packet manifest;
+- pin the offline evaluation timestamp to the manifest's committed fixture
+  retrieval timestamp rather than the wall clock;
+- require every safety-critical record to carry that same attributable
+  `retrievedAt` value; and
+- fail closed with `RETRIEVAL_EVIDENCE_INVALID` when a required timestamp is
+  missing, differs, or is not bound to the validated fixture digest.
+
+This rule makes the offline freshness result reproducible and does not assert a
+live DataHub freshness fact. Any future wall-clock freshness budget belongs to a
+separately approved isolated read-only lane.
 
 The intended safe change is a proposal mapping a verified customer-email source
 field into one verified downstream dbt model. The proposal may contain only
