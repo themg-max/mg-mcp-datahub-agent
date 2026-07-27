@@ -3,7 +3,7 @@
 ## Status, ownership, and authority
 
 - Status: approved planning artifact; this document does not authorize implementation,
-  deployment, or any external write.
+  deployment, merge, or any external write.
 - Lane: `datahub-showcase-ecommerce-offline-slice-plan`
 - Owner: `datahub-offline-slice-planning-owner`
 - Repository: `themg-max/mg-mcp-datahub-agent`
@@ -13,9 +13,9 @@
 - Trusted authority: PR #12 merge commit `8ada6b3844c3f76f96069a27b8cc4691c5cb91ac`
 
 The planning lane is authorized only to define the next deterministic offline
-slice. It must not implement the runtime, add fixtures, change tests, change
-dependencies, access DataHub, write DataHub or MG MCP, deploy, change IAM, or
-merge autonomously.
+slice. It must not implement runtime code, add fixtures or tests, change
+packages or workflows, access live DataHub, write DataHub or MG MCP, deploy,
+change IAM or credentials, or merge autonomously.
 
 ## 1. Objective and judge value
 
@@ -27,48 +27,44 @@ Demonstrate one narrow, reproducible metadata-aware development flow:
 > emit either a deterministic safe customer-email proposal or a deterministic
 > fail-closed result.
 
-The judge-visible value is the causal chain from metadata to a reviewable
-proposal:
+The judge-visible causal chain is:
 
-1. the request, source mode, immutable selected-skill identity, and context
-   budget are validated before retrieval;
-2. schema, bounded lineage, ownership, domain, tags, glossary, quality, and
-   standards evidence are normalized;
-3. approved, planning-only, quarantined, and unknown authority states remain
-   visible;
-4. the packet binds the source, budgets, allowed paths, commands, blocked
-   operations, approval requirement, and stop condition;
-5. affirmative packet approval is validated before any SQL/YAML rendering;
-6. verified metadata constrains the proposed SQL/YAML shape; and
-7. proof records the inputs, decisions, validation, scope, and final
-   disposition.
+1. validate the request, source mode, context budgets, immutable selected-skill
+   binding, and source evidence before retrieval;
+2. normalize schema, bounded lineage, ownership, domain, tags, glossary,
+   quality, standards, provenance, and authority state;
+3. bind the packet to its source, manifest, allowed scope, blocked operations,
+   full worktree identity, approval requirement, expiry, and stop condition;
+4. validate the complete current worktree identity before evaluating approval;
+5. validate affirmative packet approval and packet expiry before SQL/YAML
+   rendering;
+6. use only verified metadata to constrain the proposal; and
+7. return reviewable proof with no external writes.
 
-The output is a proposal for human review. It is never approval, a production
-dbt migration, a DataHub mutation, an MG MCP mutation, a deployment, or merge
-authority.
+The result is a proposal for human review. It is never approval, a production
+dbt migration, a DataHub or MG MCP mutation, a deployment, or merge authority.
 
 ## 2. Current-state reuse
 
-The implementation lane should reuse the existing public reference surfaces
-instead of introducing a second governance model:
+The future implementation lane should reuse the existing public reference
+surfaces instead of creating a second governance model:
 
 - `src/cli.ts` already loads a fixture, normalizes records, builds a packet, and
   emits JSON with explicit stderr failure behavior.
-- `src/datahub/context-adapter.ts` already normalizes source-neutral records and
-  preserves `approved`, `planning_only`, `quarantined`, and `unknown`.
-- `src/work-packet.ts` already canonicalizes records, deduplicates provenance,
-  derives blocked scope and unknowns, sorts arrays, and requires human approval.
+- `src/datahub/context-adapter.ts` preserves `approved`, `planning_only`,
+  `quarantined`, and `unknown` authority states.
+- `src/work-packet.ts` canonicalizes records, deduplicates provenance, derives
+  blocked scope and unknowns, sorts arrays, and requires human approval.
 - `fixtures/datahub-context.json` and `fixtures/invalid-datahub-context.json`
-  establish the existing fixture-first success and invalid-input conventions.
+  establish fixture-first success and invalid-input conventions.
 - `docs/datahub-skill-execution-architecture.md` supplies the four-plane,
   read-only, proof, failure-code, and maturity-boundary model.
-- `docs/datahub-mg-mcp-skill-bridge-architecture.md` supplies the non-reorderable
-  pre-retrieval manifest, immutable skill-binding, freshness, packet-approval,
-  and shared failure-code contracts.
-- The five existing `docs/fixtures/showcase-ecommerce/*` artifacts from the
-  fixture-contract lane define the scenario vocabulary, metadata dimensions,
-  budgets, public-safety rules, and expected blocked behavior. They remain
-  planning contracts, not runtime authority.
+- `docs/datahub-mg-mcp-skill-bridge-architecture.md` supplies the
+  non-reorderable manifest, immutable skill, freshness, worktree identity,
+  packet approval, expiry, and shared failure-code contracts.
+- The existing `docs/fixtures/showcase-ecommerce/*` artifacts define planning
+  vocabulary, metadata dimensions, budgets, public-safety rules, and expected
+  blocked behavior. They are planning contracts, not runtime authority.
 
 The existing generic fixture is not the official contest datapack and must not
 be silently reclassified as `showcase-ecommerce`. Official datapack identity,
@@ -86,86 +82,101 @@ objective       = safe dbt schema migration
 source_mode     = OFFLINE_FIXTURE
 ```
 
-Selection is exact-match and ordered:
+The workflow is non-reorderable:
 
-1. validate the source mode;
-2. create the bounded packet and its embedded `pre_retrieval_manifest`, including
-   every context-budget value, fixture/source binding, immutable selected-skill
-   fields, and the canonical manifest digest;
+1. validate `OFFLINE_FIXTURE` as the permitted source mode;
+2. create the bounded packet and embedded `pre_retrieval_manifest`, including
+   all context budgets, fixture/source binding, immutable selected-skill fields,
+   expected worktree identity, approval requirement, expiry, and canonical
+   manifest digest;
 3. before reading any fixture record, validate manifest budgets, source binding,
    content digest, deterministic freshness inputs, and immutable selected-skill
    identity;
 4. fail with `SKILL_BINDING_FAILED` before retrieval when the selected skill ID,
-   source, version, license, or content digest is missing, `UNKNOWN`, changed, or
-   does not match the approved registry record;
-5. resolve exactly one target dataset;
-6. resolve the target schema;
-7. resolve at most one downstream lineage path at depth one;
-8. resolve ownership;
-9. resolve domain, tags, glossary, quality, and approved standards;
-10. screen all retrieved text as data only;
-11. build canonical context values and bind them back to the validated packet;
-12. validate screening bindings and affirmative packet approval, including the
+   canonical source, exact version, license, or content digest is missing,
+   `UNKNOWN`, changed, or does not match the approved registry record;
+5. resolve exactly one target dataset and its schema;
+6. resolve at most one downstream lineage path at depth one;
+7. resolve ownership, domain, tags, glossary, quality, and approved standards;
+8. screen all retrieved text as untrusted data only;
+9. build canonical context and bind it back to the validated packet;
+10. resolve the current repository root, Git common directory, absolute worktree
+    path and identity, branch, and exact head from the checkout;
+11. compare every resolved worktree value with the packet and approval bindings,
+    reject `main`, a detached or missing branch, another repository clone,
+    another worktree, a wrong branch, or a head mismatch, and return
+    `WORKTREE_INVALID` before approval evaluation;
+12. validate screening bindings and affirmative packet approval, including
     reviewer identity, approval timestamp, disposition, approval digest, exact
-    approved worktree head, and current packet digest;
-13. validate that packet `expires_at` is present, timezone-aware, correctly bound
-    to the packet and approval, and not elapsed at the deterministic execution
-    check time; and
-14. render the proposal only when approval and expiry validation pass, otherwise
-    emit the deterministic blocked result.
+    approved worktree identity and head, and current packet digest;
+13. validate that packet `expires_at` is present, timezone-aware, bound to the
+    packet and approval, and not elapsed at the deterministic execution check
+    time; and
+14. render the proposal only when all prior gates pass; otherwise emit the
+    deterministic blocked result.
+
+### 3.1 Bounded retrieval and deterministic freshness
 
 The offline fixture must be byte-stable, network-free, public-safe, and
-deterministically ordered. Local fixture keys are not DataHub entity IDs.
-Budgets remain bounded at the contract values: eight entities, lineage depth
-one, two lineage edges, sixteen total records, 4,000 estimated tokens, and a
-30-second retrieval timeout.
+canonically ordered. Local fixture keys are not DataHub entity IDs. Contract
+budgets remain bounded to eight entities, lineage depth one, two lineage edges,
+sixteen total records, 4,000 estimated tokens, and a 30-second retrieval
+timeout.
 
 The fixture contract currently records `max_freshness_age: UNKNOWN`; an
-implementation must not copy that value into the packet or convert it to an
-apparent zero-age success. For `OFFLINE_FIXTURE`, the deterministic freshness
-rule is:
+implementation must not copy that value into an executable packet or manufacture
+an apparent zero-age success. The implementation fixture must provide:
 
-- the implementation fixture manifest must provide a concrete ISO 8601
-  `max_freshness_age` duration and a committed deterministic `checked_at` value;
-- every attributable safety-critical source record must provide
-  `source_updated_at`; `retrievedAt` remains retrieval evidence and is not a
-  substitute for source-update time;
-- observed freshness age is computed exactly as
-  `checked_at - source_updated_at` and recorded in context and proof;
-- the observed age must be non-negative and less than or equal to the packet's
-  `max_freshness_age`; and
-- a missing, `UNKNOWN`, malformed, future-dated, or over-age source timestamp, or
-  a missing/invalid freshness duration, fails closed with
-  `FRESHNESS_EXCEEDED` before proposal rendering.
+- a concrete ISO 8601 `max_freshness_age` duration;
+- a committed deterministic `checked_at` value; and
+- attributable `source_updated_at` for every safety-critical source record.
 
-Pinning `checked_at` in the committed fixture makes the test reproducible while
-still measuring freshness from the attributable source-update time. It does not
-assert a live DataHub freshness fact. Any future wall-clock freshness budget
-belongs to a separately approved isolated read-only lane.
+`retrievedAt` is retrieval evidence and is not a substitute for source update
+time. Observed age is exactly `checked_at - source_updated_at`, must be
+non-negative, and must not exceed `max_freshness_age`. Missing, `UNKNOWN`,
+malformed, future-dated, or over-age evidence returns `FRESHNESS_EXCEEDED`
+before approval or rendering.
+
+### 3.2 Immutable selected-skill binding
 
 The packet's `selected_skill` binding must contain an immutable skill ID,
 canonical source, exact version, license, and content digest. The current
-planning artifacts do not verify an executable skill identity; therefore the
-future implementation success path remains blocked with `SKILL_BINDING_FAILED`
-until a separately reviewed registry record supplies and validates every field.
-No local label or model-selected skill name may satisfy this gate.
+planning artifacts do not verify an executable skill identity, so the future
+implementation success path remains blocked with `SKILL_BINDING_FAILED` until a
+separately reviewed registry record supplies and validates every field. A local
+label or model-selected name cannot satisfy this gate.
 
-The intended safe change is a proposal mapping a verified customer-email source
-field into one verified downstream dbt model. The proposal may contain only
-values attributable to the fixture or an approved isolated read-only source;
-symbolic placeholders are not executable identifiers.
+### 3.3 Full worktree identity binding
 
-Rendering the SQL/YAML proposal is packet execution by the bounded worker, not a
-pre-approval preview. Before rendering, the worker must validate affirmative
-human approval tied to the exact packet digest and approved worktree head. An
-absent approval returns `APPROVAL_REQUIRED`; invalid reviewer, timestamp, or
-disposition evidence returns `APPROVAL_INVALID`; an approved-head mismatch
-returns `APPROVAL_HEAD_MISMATCH`; and approval/packet digest divergence returns
-`PACKET_APPROVAL_MISMATCH`. The worker must also validate a timezone-aware
-packet `expires_at` against the deterministic execution check time before
-rendering. A missing, malformed, incorrectly bound, or elapsed expiry returns
-`PACKET_EXPIRED`. In every blocked case, `proposal` remains `null` and
-`executed_writes` remains empty.
+Before approval is evaluated, the worker must resolve and canonicalize:
+
+- repository root;
+- Git common directory;
+- absolute worktree path and registered worktree identity;
+- branch name; and
+- exact head SHA.
+
+Those values must match the immutable packet and approval bindings. The worker
+must reject `main`, a detached or missing branch, another clone of the same
+repository, another registered worktree, a wrong absolute path, a wrong branch,
+or an exact-head mismatch. Any missing, ambiguous, or mismatched value returns
+`WORKTREE_INVALID`; `proposal` remains `null` and `executed_writes` remains
+empty. Matching only the head SHA is insufficient.
+
+### 3.4 Approval and expiry binding
+
+SQL/YAML rendering is packet execution by a bounded worker, not a pre-approval
+preview. After worktree validation, the worker must validate affirmative human
+approval tied to the exact packet digest and complete approved worktree
+identity. Failure semantics are:
+
+- absent approval: `APPROVAL_REQUIRED`;
+- invalid reviewer, timestamp, or disposition: `APPROVAL_INVALID`;
+- approved-head mismatch: `APPROVAL_HEAD_MISMATCH`;
+- approval/packet digest divergence: `PACKET_APPROVAL_MISMATCH`; and
+- missing, malformed, incorrectly bound, or elapsed expiry: `PACKET_EXPIRED`.
+
+Every blocked result has `proposal: null` and `executed_writes: []`.
 
 ## 4. Authority-state behavior
 
@@ -173,128 +184,113 @@ Authority is evidence metadata, not a model judgment:
 
 | State | Permitted use | Required behavior |
 | --- | --- | --- |
-| `approved` | Constrain the proposal when provenance and freshness validate | Preserve source reference and validate it against the packet scope |
-| `planning_only` | Describe intended scope and contracts | Never authorize implementation, deployment, DataHub writes, or merge |
+| `approved` | Constrain a proposal when provenance, freshness, and bindings validate | Preserve source reference and validate it against packet scope |
+| `planning_only` | Describe intended scope and contracts | Never authorize implementation, deployment, writes, or merge |
 | `quarantined` | No decision use | Exclude from authority decisions and retain the quarantine reason in proof |
 | `unknown` | Preserve as unresolved evidence | Never infer a value; block when safety-critical and record the next permitted read-only check |
 
-The repository-approved authority for this planning lane is the trusted
-PR #12 merge commit and the lane registry's `APPROVED` entry. The fixture
-contract and this document are planning-only. Proposed or draft architecture,
-skill, datapack, live connection, and tool identities cannot authorize runtime.
-Missing retrieval is `UNKNOWN`, not proof of absence. Conflicting attributable
-records block the affected proposal.
+The repository-approved authority for this planning lane is PR #12's trusted
+merge commit and the lane registry's `APPROVED` entry. The fixture contract and
+this document remain planning-only. Missing retrieval is `UNKNOWN`, not proof
+of absence. Conflicting attributable records block the affected proposal.
 
 ## 5. Deterministic output contracts
 
 ### 5.1 Success output
 
-Only after immutable skill binding, manifest validation, freshness validation,
-screening, context binding, affirmative packet approval, and packet-expiry
-validation all pass, emit one stable JSON result containing:
+Only after manifest, immutable-skill, freshness, screening, context, full
+worktree identity, affirmative approval, and packet-expiry validation all pass,
+emit one stable JSON result containing:
 
 - `status: "proposal_ready"`;
 - the exact request and `OFFLINE_FIXTURE` source mode;
-- the immutable selected-skill identity and verified digest;
+- immutable selected-skill identity and verified digest;
 - canonical context records with provenance, `source_updated_at`, observed age,
   and authority state;
-- a bounded work packet with `humanApprovalRequired: true` and approval
-  validation bound to the exact packet digest and approved worktree head;
-- the selected field, downstream relation/model, glossary meaning, and quality
-  assertion;
-- the proposal shape:
+- a bounded packet with `humanApprovalRequired: true`;
+- resolved repository root, Git common directory, absolute worktree identity,
+  non-`main` branch, and exact head, all bound to packet and approval digests;
+- reviewer identity, disposition, approval digest, expiry, and deterministic
+  execution check time;
+- the verified selected field, downstream relation or model, glossary meaning,
+  and quality assertion;
+- deterministic SQL and matching dbt schema-test YAML proposal shapes; and
+- proof for fixture, skill, worktree, packet, context, approval, freshness,
+  expiry, commands, tests, changed paths, warnings, and
+  `executed_writes: []`.
 
-  ```sql
-  select
-    <verified_customer_email_field> as customer_email
-  from <verified_downstream_relation>
-  ```
+Stable inputs must produce stable key, record, array, and serialization order.
+A successful result remains a proposal and does not authorize implementation,
+deployment, production migration, or merge.
 
-  and the matching dbt schema-test YAML shape; and
-- proof fields for fixture digest, skill binding, packet/context/approval
-  bindings, freshness calculation, commands, tests, changed paths, warnings,
-  and `executed_writes: []`.
+### 5.2 Fail-closed output
 
-The JSON key order, record order, array order, and serialization formatting must
-be stable for identical request, approval, and fixture bytes. A successful
-result remains a proposal and does not authorize merge, deployment, or a
-production dbt migration. Final review and merge authorization remain separate
-human decisions.
+Emit a stable blocked result instead of guessed SQL/YAML when any source mode,
+budget, manifest, immutable skill, freshness, screening, worktree identity,
+approval, expiry, authority, command, or safety-critical `UNKNOWN` gate fails.
+The exact applicable failure code includes:
 
-### 5.2 Deterministic fail-closed output
+- `SKILL_BINDING_FAILED`;
+- `FRESHNESS_EXCEEDED`;
+- `WORKTREE_INVALID`;
+- `APPROVAL_REQUIRED`;
+- `APPROVAL_INVALID`;
+- `APPROVAL_HEAD_MISMATCH`;
+- `PACKET_APPROVAL_MISMATCH`;
+- `PACKET_EXPIRED`;
+- `SOURCE_MODE_BLOCKED`;
+- `AUTHORITY_CONFLICT`;
+- `RETRIEVAL_EVIDENCE_INVALID`;
+- `FORBIDDEN_OPERATION_ATTEMPTED`;
+- `SCOPE_VIOLATION`; or
+- `PROOF_INCOMPLETE`.
 
-If a source mode is blocked, immutable skill binding fails, a budget is
-exceeded, freshness evidence is missing or over age, screening fails, packet
-approval is absent or invalid, the packet expiry is missing, malformed,
-incorrectly bound, or elapsed, a required record conflicts, a tool or command
-is unauthorized, or any safety-critical field is `UNKNOWN`, emit a stable
-blocked result rather than guessed SQL/YAML:
-
-- `status: "blocked"`;
-- the exact applicable stable failure code, including
-  `SKILL_BINDING_FAILED`, `FRESHNESS_EXCEEDED`, `APPROVAL_REQUIRED`,
-  `APPROVAL_INVALID`, `APPROVAL_HEAD_MISMATCH`,
-  `PACKET_APPROVAL_MISMATCH`, `PACKET_EXPIRED`, `SOURCE_MODE_BLOCKED`,
-  `AUTHORITY_CONFLICT`, `RETRIEVAL_EVIDENCE_INVALID`,
-  `FORBIDDEN_OPERATION_ATTEMPTED`, `SCOPE_VIOLATION`, or
-  `PROOF_INCOMPLETE`;
-- the exact request, source mode, context/packet identifiers, and attributable
-  evidence available;
-- ordered blocking unknowns or conflicts, with each field, reason, source,
-  blocking state, and next permitted read-only check;
-- `proposal: null` (no guessed SQL or YAML);
-- `executed_writes: []`; and
-- the stop condition and required owner/reviewer.
-
-An invalid fixture or runtime error must retain the existing CLI convention:
-nonzero exit status and a plain error on stderr, with no success-shaped
-fallback and no leaked response body or secret.
+The blocked result contains the exact request, source mode, packet and context
+identifiers, attributable evidence, ordered unknowns or conflicts, next
+permitted read-only check, `proposal: null`, `executed_writes: []`, stop
+condition, and required owner or reviewer. Invalid fixtures or runtime errors
+retain nonzero exit status and plain stderr without a success-shaped fallback,
+response-body leakage, or secrets.
 
 ## 6. Proposed future implementation paths
 
-These are proposals for a separately registered and approved implementation
-lane; they are not writable in this planning lane:
+These paths require a separately registered and approved implementation lane:
 
 1. `src/showcase-ecommerce/scenario.ts` — exact scenario selection, source-mode
-   policy, immutable selected-skill validation, budget/freshness checks,
-   authority handling, and failure codes.
-2. `src/showcase-ecommerce/context.ts` — fixture/read-only context loading,
-   required metadata dimensions, attribution, `source_updated_at`, sanitization,
-   and UNKNOWN records.
-3. `src/showcase-ecommerce/approval.ts` — screening-to-packet binding,
-   affirmative approval validation against reviewer identity, disposition,
-   approval digest, packet digest, and exact approved worktree head, plus a
-   timezone-aware and unelapsed packet-expiry check before rendering.
+   policy, manifest, immutable-skill, freshness, authority, and failure codes.
+2. `src/showcase-ecommerce/context.ts` — fixture/read-only loading, attribution,
+   `source_updated_at`, sanitization, provenance, and UNKNOWN records.
+3. `src/showcase-ecommerce/approval.ts` — screening-to-packet binding; canonical
+   repository root, Git common directory, absolute worktree identity, non-`main`
+   branch, and exact-head validation; affirmative approval; and packet expiry.
 4. `src/showcase-ecommerce/proposal.ts` — deterministic SQL/YAML rendering only
-   after approval validation, or a blocked result with no executable
-   substitution from unknown values.
-5. `src/showcase-ecommerce/proof.ts` — canonical skill, freshness, approval,
-   packet, context, and digest bindings, including the symbolic
-   forbidden-operation check.
-6. `src/cli.ts` — an explicitly selected showcase-ecommerce command path that
-   reuses the existing adapter and packet builder without changing generic demo
-   behavior.
+   after all gates pass, otherwise a blocked result.
+5. `src/showcase-ecommerce/proof.ts` — canonical fixture, skill, freshness,
+   worktree, approval, expiry, packet, context, and digest bindings.
+6. `src/cli.ts` — an explicitly selected showcase command path that preserves
+   existing generic behavior.
 7. `fixtures/showcase-ecommerce/context.json` and
-   `fixtures/showcase-ecommerce/expected-output.json` — only after fixture
-   provenance, license, concrete freshness inputs, immutable skill record,
-   sanitization, and a new implementation-lane allowlist are approved.
-8. `tests/showcase-ecommerce/*.test.ts` — deterministic success; missing or
-   changed skill fields; missing, malformed, future, and over-age
-   `source_updated_at`; missing/invalid approval and head/digest mismatch;
-   missing, malformed, incorrectly bound, and elapsed packet expiry; each
-   blocking authority state; UNKNOWN propagation; conflict; budget; invalid
-   source mode; and forbidden-operation cases.
-9. `examples/showcase-ecommerce/` — judge-facing output and proof only after
-   the implementation and test lane is approved.
+   `fixtures/showcase-ecommerce/expected-output.json` — only after provenance,
+   license, freshness inputs, immutable skill record, sanitization, and an
+   implementation-lane allowlist are approved.
+8. `tests/showcase-ecommerce/*.test.ts` — deterministic success and blocked cases
+   for missing or changed skill fields; missing, malformed, future, and over-age
+   source timestamps; wrong repository root; wrong Git common directory; wrong
+   worktree path or identity; `main`; detached or wrong branch; head mismatch;
+   missing or invalid approval; packet/approval mismatch; missing, malformed,
+   incorrectly bound, and elapsed expiry; authority conflict; UNKNOWN; budget;
+   invalid source mode; and forbidden operations.
+9. `examples/showcase-ecommerce/` — judge-facing output and proof only after the
+   implementation and test lane is approved.
 
 The implementation lane must not add a live DataHub dependency. An optional
-`ISOLATED_DATAHUB_READ_ONLY` path can be considered only after connection,
-identity, tool inventory, endpoint digest, freshness, and read-only behavior
-are separately approved and captured. No write tool is part of this slice.
+`ISOLATED_DATAHUB_READ_ONLY` path is a later, separately approved increment
+requiring verified connection, identity, tool inventory, endpoint digest,
+freshness, and read-only behavior. No write tool is part of this slice.
 
 ## 7. Exact validation and proof evidence
 
-The planning PR must run these commands from the repository root:
+The planning PR must run from the repository root:
 
 ```bash
 ./scripts/check_lane_state.sh mutation
@@ -308,59 +304,51 @@ npm test
 npm run demo:json
 ```
 
-The exact one-file proof must include:
+The one-file proof must include:
 
-- repository, branch, worktree, owner, lane status, allowed path, base SHA,
-  head SHA, and trusted authority SHA;
-- the exact changed-path output and `git diff --check` result;
-- the Gatekeeper mutation result;
-- the four required package command results and their exit codes;
-- the planning artifact path and non-empty byte count;
-- the fixture-first scenario, immutable skill-binding gate, source-update-based
-  freshness rule, approval-before-render rule, authority-state rules, success
-  contract, and fail-closed contract reviewed;
-- confirmation that no hooks, runtime source, fixtures, tests, examples,
-  dependencies, workflows, deployment, IAM, credentials, DataHub, or MG MCP
-  writes changed; and
-- PR URL/number, exact-head CI result, Codex review request, reviewer
-  disposition, and unresolved items.
+- repository, branch, absolute worktree path and identity, Git common directory,
+  owner, lane status, allowed path, base SHA, head SHA, and trusted authority;
+- exact changed-path output, Gatekeeper result, and `git diff --check`;
+- package command results and exit codes;
+- non-empty artifact byte count;
+- manifest ordering, immutable-skill gate, source-update freshness, full
+  worktree-identity-before-approval rule, approval-before-render rule,
+  packet-expiry rule, authority behavior, and output contracts reviewed;
+- deterministic blocked evidence for wrong repository root, common directory,
+  worktree, `main`, wrong/detached branch, and head mismatch using
+  `WORKTREE_INVALID`;
+- confirmation that runtime, fixtures, tests, examples, dependencies, workflows,
+  hooks, deployment, IAM, credentials, DataHub writes, and MG MCP writes did not
+  change; and
+- PR number, exact-head CI, Codex review, reviewer disposition, and unresolved
+  items.
 
-Proof is evidence of validation, not merge authority. The implementation lane
-must add its own deterministic demo output and blocked-path proof artifacts
-under its separately approved paths.
+Proof is validation evidence, not merge authority.
 
 ## 8. Implementation-lane proposal
 
-After this planning PR is independently reviewed and merged, open one
-implementation lane with owner, worktree, base commit, and an explicit allowlist
-covering only the proposed `src/showcase-ecommerce/`, selected existing
-integration files, showcase fixture/output files, showcase tests, and judge
-example files. The packet must require:
+After this planning PR is independently reviewed and merged, open one bounded
+implementation lane with a named owner, worktree, base commit, and explicit
+allowlist. Its packet must require:
 
-- `OFFLINE_FIXTURE` as the default and first executable mode;
-- no network, credentials, private or production metadata;
-- an immutable selected skill ID, canonical source, exact version, license, and
-  content digest validated before fixture retrieval;
-- a concrete fixture `max_freshness_age`, deterministic `checked_at`, and
-  attributable `source_updated_at` values with age calculated as
-  `checked_at - source_updated_at`;
-- exact source, context, packet, approval, and proof digests;
-- `humanApprovalRequired: true`, with affirmative approval validated before
-  proposal rendering against reviewer identity, disposition, packet digest,
-  and exact approved worktree head;
-- a timezone-aware packet `expires_at` bound to the packet and approval, with a
-  deterministic execution check proving that it has not expired before
-  rendering;
-- no DataHub or MG MCP write tools;
-- no production dbt migration or deployment;
+- `OFFLINE_FIXTURE` as the first executable mode;
+- no network, credentials, private, or production metadata;
+- immutable skill ID, source, version, license, and digest before retrieval;
+- concrete `max_freshness_age`, deterministic `checked_at`, attributable
+  `source_updated_at`, and `checked_at - source_updated_at` validation;
+- exact source, context, packet, approval, expiry, and proof digests;
+- canonical repository root, Git common directory, absolute registered worktree
+  identity, a non-`main` approved branch, and exact head validated before
+  approval and rendering;
+- affirmative human approval bound to reviewer, disposition, packet digest,
+  complete worktree identity, and head;
+- timezone-aware unelapsed packet expiry;
+- no DataHub or MG MCP writes, production migration, or deployment;
 - deterministic success and blocked outputs;
-- an independent reviewer for code, fixture provenance, skill supply chain,
-  privacy, approval evidence, and proof; and
+- independent review of code, fixture provenance, skill supply chain, privacy,
+  worktree identity, approval, expiry, and proof; and
 - a stop at proof return or any safety-critical UNKNOWN, conflict, freshness,
-  skill-binding, approval, or packet-expiry failure.
-
-The optional isolated read-only mode is a later, separately approved increment,
-not a reason to delay or weaken the offline proof.
+  skill, worktree, approval, or expiry failure.
 
 ## 9. Blocked scope
 
@@ -370,39 +358,40 @@ This planning lane explicitly blocks:
 - `.githooks/**`, Gatekeeper skill files, and Gatekeeper script changes;
 - package, lockfile, dependency, and workflow changes;
 - live DataHub access, credentials, private endpoints, and production metadata;
-- DataHub writes, MG MCP writes, deployment, IAM, billing, or environment
-  changes;
-- production dbt changes, autonomous PR merge, and authority promotion.
+- DataHub writes, MG MCP writes, deployment, IAM, billing, and environment
+  changes; and
+- production dbt changes, autonomous merge, and authority promotion.
 
-The missing `.githooks/pre-commit` and `.githooks/post-checkout` files are
-outside this lane and are not created or normalized here. Hook-policy
-normalization is deferred to a separate governance lane.
+Missing hook files remain outside this lane and are deferred to a separate
+governance lane.
 
 ## 10. Definition of done
 
 This planning lane is done when:
 
-1. this artifact is non-empty, reviewable, and changed as the only path;
-2. the objective, judge value, reuse map, canonical scenario, immutable
-   skill-binding gate, source-update-based freshness rule,
-   approval-before-render rule, authority rules, output contracts,
-   implementation paths, validation, proof, blocked scope,
-   implementation-lane proposal, and stop condition are explicit;
-3. all unverified datapack, live DataHub, skill, tool, and executable entity
-   values remain `UNKNOWN` rather than invented, and any safety-critical UNKNOWN
-   blocks the affected path;
-4. the plan preserves the existing read-only, fixture-first, pre-retrieval
-   supply-chain validation, human-approval, and no-write boundaries;
-5. `check_lane_state.sh mutation`, non-empty, containment, diff, typecheck,
-   test, and demo validation pass;
-6. the commit is pushed and a one-file planning PR is opened;
-7. exact-head CI passes and Codex review is requested; and
-8. the proof return is captured without merging or beginning implementation.
+1. this artifact is non-empty, reviewable, and the only changed path;
+2. objective, judge value, reuse, canonical workflow, manifest ordering,
+   immutable skill, source-update freshness, full worktree identity,
+   approval-before-render, expiry, authority, outputs, future paths, validation,
+   proof, blocked scope, implementation proposal, and stop condition are
+   explicit;
+3. unverified datapack, live DataHub, skill, tool, and executable values remain
+   `UNKNOWN` and block safety-critical paths;
+4. read-only, fixture-first, pre-retrieval supply-chain, non-`main` worktree,
+   human approval, expiry, and no-write boundaries are preserved;
+5. Gatekeeper, non-empty, containment, diff, typecheck, test, and demo validation
+   pass;
+6. the commit is pushed to the approved branch;
+7. exact-head CI passes and Codex review completes with no unresolved findings;
+8. a final Reviewer Disposition is posted; and
+9. merge occurs only after explicit human authorization and GitHub reports the
+   exact head mergeable.
 
 ## 11. Stop condition
 
-Stop after the planning PR is opened, exact-head CI passes, Codex review is
-requested, and the proof return is captured. Do not merge, begin runtime
+Stop at any failed gate or unresolved review finding. Do not begin runtime
 implementation, add fixtures or tests in this lane, access live or private
 DataHub, write DataHub or MG MCP, change dependencies or workflows, deploy,
-change IAM or credentials, or normalize hooks here.
+change IAM or credentials, normalize hooks, promote authority, or merge before
+exact-head CI, independent review, final Reviewer Disposition, and explicit
+human authorization are complete.
