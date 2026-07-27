@@ -30,16 +30,17 @@ Demonstrate one narrow, reproducible metadata-aware development flow:
 The judge-visible causal chain is:
 
 1. validate the request, source mode, context budgets, immutable selected-skill
-   binding, and source evidence before retrieval;
-2. normalize schema, bounded lineage, ownership, domain, tags, glossary,
-   quality, standards, provenance, and authority state;
-3. bind the packet to its source, manifest, allowed scope, blocked operations,
-   full worktree identity, approval requirement, expiry, and stop condition;
-4. validate the complete current worktree identity before evaluating approval;
-5. validate affirmative packet approval and packet expiry before SQL/YAML
-   rendering;
-6. use only verified metadata to constrain the proposal; and
-7. return reviewable proof with no external writes.
+   binding, and manifest-level source evidence before retrieval;
+2. retrieve and normalize schema, bounded lineage, ownership, domain, tags,
+   glossary, quality, standards, provenance, and authority state;
+3. validate per-record source freshness after retrieval and before approval;
+4. bind the packet to its source, manifest, allowed scope, blocked operations,
+   expected worktree identity, approval requirement, expiry, and stop condition;
+5. validate the current checkout against the immutable packet worktree binding;
+6. separately validate affirmative approval against packet, worktree, and head
+   bindings before SQL/YAML rendering;
+7. use only verified metadata to constrain the proposal; and
+8. return reviewable proof with no external writes.
 
 The result is a proposal for human review. It is never approval, a production
 dbt migration, a DataHub or MG MCP mutation, a deployment, or merge authority.
@@ -90,29 +91,33 @@ The workflow is non-reorderable:
    expected worktree identity, approval requirement, expiry, and canonical
    manifest digest;
 3. before reading any fixture record, validate manifest budgets, source binding,
-   content digest, deterministic freshness inputs, and immutable selected-skill
-   identity;
+   content digest, manifest-level deterministic freshness inputs
+   (`max_freshness_age` and `checked_at`), and immutable selected-skill identity;
 4. fail with `SKILL_BINDING_FAILED` before retrieval when the selected skill ID,
    canonical source, exact version, license, or content digest is missing,
    `UNKNOWN`, changed, or does not match the approved registry record;
 5. resolve exactly one target dataset and its schema;
 6. resolve at most one downstream lineage path at depth one;
 7. resolve ownership, domain, tags, glossary, quality, and approved standards;
-8. screen all retrieved text as untrusted data only;
-9. build canonical context and bind it back to the validated packet;
-10. resolve the current repository root, Git common directory, absolute worktree
+8. after all required records are retrieved, require attributable
+   `source_updated_at` for every safety-critical record, calculate
+   `checked_at - source_updated_at`, and return `FRESHNESS_EXCEEDED` for missing,
+   malformed, future-dated, or over-age evidence;
+9. screen all retrieved text as untrusted data only;
+10. build canonical context and bind it back to the validated packet;
+11. resolve the current repository root, Git common directory, absolute worktree
     path and identity, branch, and exact head from the checkout;
-11. compare every resolved worktree value with the packet and approval bindings,
-    reject `main`, a detached or missing branch, another repository clone,
-    another worktree, a wrong branch, or a head mismatch, and return
-    `WORKTREE_INVALID` before approval evaluation;
-12. validate screening bindings and affirmative packet approval, including
-    reviewer identity, approval timestamp, disposition, approval digest, exact
-    approved worktree identity and head, and current packet digest;
-13. validate that packet `expires_at` is present, timezone-aware, bound to the
+12. compare every resolved checkout value only with the immutable packet
+    worktree binding, reject `main`, a detached or missing branch, another
+    repository clone, another worktree, a wrong branch, or a head mismatch, and
+    return `WORKTREE_INVALID` before approval evaluation;
+13. separately validate screening bindings and affirmative packet approval,
+    including reviewer identity, approval timestamp, disposition, approval
+    digest, approved worktree identity and head, and current packet digest;
+14. validate that packet `expires_at` is present, timezone-aware, bound to the
     packet and approval, and not elapsed at the deterministic execution check
     time; and
-14. render the proposal only when all prior gates pass; otherwise emit the
+15. render the proposal only when all prior gates pass; otherwise emit the
     deterministic blocked result.
 
 ### 3.1 Bounded retrieval and deterministic freshness
@@ -125,17 +130,20 @@ timeout.
 
 The fixture contract currently records `max_freshness_age: UNKNOWN`; an
 implementation must not copy that value into an executable packet or manufacture
-an apparent zero-age success. The implementation fixture must provide:
+an apparent zero-age success. Before retrieval, the manifest must provide and
+validate only:
 
 - a concrete ISO 8601 `max_freshness_age` duration;
 - a committed deterministic `checked_at` value; and
-- attributable `source_updated_at` for every safety-critical source record.
+- the fixture/source and content-digest bindings.
 
-`retrievedAt` is retrieval evidence and is not a substitute for source update
-time. Observed age is exactly `checked_at - source_updated_at`, must be
-non-negative, and must not exceed `max_freshness_age`. Missing, `UNKNOWN`,
-malformed, future-dated, or over-age evidence returns `FRESHNESS_EXCEEDED`
-before approval or rendering.
+After the required records are retrieved, every safety-critical record must
+provide attributable `source_updated_at`. `retrievedAt` is retrieval evidence
+and is not a substitute for source update time. Observed age is exactly
+`checked_at - source_updated_at`, must be non-negative, and must not exceed
+`max_freshness_age`. Missing, `UNKNOWN`, malformed, future-dated, or over-age
+record evidence returns `FRESHNESS_EXCEEDED` after retrieval but before context
+approval or rendering.
 
 ### 3.2 Immutable selected-skill binding
 
@@ -156,24 +164,32 @@ Before approval is evaluated, the worker must resolve and canonicalize:
 - branch name; and
 - exact head SHA.
 
-Those values must match the immutable packet and approval bindings. The worker
-must reject `main`, a detached or missing branch, another clone of the same
-repository, another registered worktree, a wrong absolute path, a wrong branch,
-or an exact-head mismatch. Any missing, ambiguous, or mismatched value returns
-`WORKTREE_INVALID`; `proposal` remains `null` and `executed_writes` remains
-empty. Matching only the head SHA is insufficient.
+At this gate, those observed values are compared only with the immutable packet
+worktree binding. The worker must reject `main`, a detached or missing branch,
+another clone of the same repository, another registered worktree, a wrong
+absolute path, a wrong branch, or an exact-head mismatch. Any missing,
+ambiguous, or mismatched checkout-to-packet value returns `WORKTREE_INVALID`;
+`proposal` remains `null` and `executed_writes` remains empty. Matching only the
+head SHA is insufficient.
+
+Approval evidence is not used to classify a checkout as valid or invalid.
+Approval-to-packet and approval-to-worktree mismatches are evaluated only in the
+subsequent approval gate with approval-specific failure codes.
 
 ### 3.4 Approval and expiry binding
 
 SQL/YAML rendering is packet execution by a bounded worker, not a pre-approval
-preview. After worktree validation, the worker must validate affirmative human
-approval tied to the exact packet digest and complete approved worktree
-identity. Failure semantics are:
+preview. After checkout-to-packet worktree validation passes, the worker must
+separately validate affirmative human approval tied to the exact packet digest,
+approved worktree identity, and approved head. Failure semantics are:
 
 - absent approval: `APPROVAL_REQUIRED`;
-- invalid reviewer, timestamp, or disposition: `APPROVAL_INVALID`;
-- approved-head mismatch: `APPROVAL_HEAD_MISMATCH`;
-- approval/packet digest divergence: `PACKET_APPROVAL_MISMATCH`; and
+- malformed reviewer, timestamp, disposition, or approval identity evidence:
+  `APPROVAL_INVALID`;
+- approved worktree identity or head differs from the validated packet/current
+  checkout binding: `APPROVAL_HEAD_MISMATCH`;
+- approval digest or approved packet digest diverges from the current packet:
+  `PACKET_APPROVAL_MISMATCH`; and
 - missing, malformed, incorrectly bound, or elapsed expiry: `PACKET_EXPIRED`.
 
 Every blocked result has `proposal: null` and `executed_writes: []`.
@@ -198,9 +214,9 @@ of absence. Conflicting attributable records block the affected proposal.
 
 ### 5.1 Success output
 
-Only after manifest, immutable-skill, freshness, screening, context, full
-worktree identity, affirmative approval, and packet-expiry validation all pass,
-emit one stable JSON result containing:
+Only after manifest, immutable-skill, post-retrieval per-record freshness,
+screening, context, checkout-to-packet worktree identity, affirmative approval,
+and packet-expiry validation all pass, emit one stable JSON result containing:
 
 - `status: "proposal_ready"`;
 - the exact request and `OFFLINE_FIXTURE` source mode;
@@ -209,15 +225,16 @@ emit one stable JSON result containing:
   and authority state;
 - a bounded packet with `humanApprovalRequired: true`;
 - resolved repository root, Git common directory, absolute worktree identity,
-  non-`main` branch, and exact head, all bound to packet and approval digests;
+  non-`main` branch, and exact head, bound first to the immutable packet and then
+  separately verified against approval evidence;
 - reviewer identity, disposition, approval digest, expiry, and deterministic
   execution check time;
 - the verified selected field, downstream relation or model, glossary meaning,
   and quality assertion;
 - deterministic SQL and matching dbt schema-test YAML proposal shapes; and
-- proof for fixture, skill, worktree, packet, context, approval, freshness,
-  expiry, commands, tests, changed paths, warnings, and
-  `executed_writes: []`.
+- proof for fixture, skill, freshness stage, worktree packet binding, approval
+  binding, expiry, packet, context, commands, tests, changed paths, warnings,
+  and `executed_writes: []`.
 
 Stable inputs must produce stable key, record, array, and serialization order.
 A successful result remains a proposal and does not authorize implementation,
@@ -226,9 +243,9 @@ deployment, production migration, or merge.
 ### 5.2 Fail-closed output
 
 Emit a stable blocked result instead of guessed SQL/YAML when any source mode,
-budget, manifest, immutable skill, freshness, screening, worktree identity,
-approval, expiry, authority, command, or safety-critical `UNKNOWN` gate fails.
-The exact applicable failure code includes:
+budget, manifest, immutable skill, post-retrieval freshness, screening,
+checkout-to-packet worktree identity, approval, expiry, authority, command, or
+safety-critical `UNKNOWN` gate fails. The exact applicable failure code includes:
 
 - `SKILL_BINDING_FAILED`;
 - `FRESHNESS_EXCEEDED`;
@@ -257,16 +274,20 @@ response-body leakage, or secrets.
 These paths require a separately registered and approved implementation lane:
 
 1. `src/showcase-ecommerce/scenario.ts` — exact scenario selection, source-mode
-   policy, manifest, immutable-skill, freshness, authority, and failure codes.
+   policy, manifest-level freshness inputs, immutable-skill validation,
+   authority, and failure codes.
 2. `src/showcase-ecommerce/context.ts` — fixture/read-only loading, attribution,
-   `source_updated_at`, sanitization, provenance, and UNKNOWN records.
-3. `src/showcase-ecommerce/approval.ts` — screening-to-packet binding; canonical
-   repository root, Git common directory, absolute worktree identity, non-`main`
-   branch, and exact-head validation; affirmative approval; and packet expiry.
+   post-retrieval per-record `source_updated_at` validation, sanitization,
+   provenance, and UNKNOWN records.
+3. `src/showcase-ecommerce/approval.ts` — screening-to-packet binding;
+   checkout-to-immutable-packet repository root, Git common directory, absolute
+   worktree identity, non-`main` branch, and exact-head validation; separate
+   approval-to-packet/worktree/head validation; and packet expiry.
 4. `src/showcase-ecommerce/proposal.ts` — deterministic SQL/YAML rendering only
    after all gates pass, otherwise a blocked result.
-5. `src/showcase-ecommerce/proof.ts` — canonical fixture, skill, freshness,
-   worktree, approval, expiry, packet, context, and digest bindings.
+5. `src/showcase-ecommerce/proof.ts` — canonical fixture, skill, freshness-stage,
+   worktree packet binding, approval binding, expiry, packet, context, and
+   digest evidence.
 6. `src/cli.ts` — an explicitly selected showcase command path that preserves
    existing generic behavior.
 7. `fixtures/showcase-ecommerce/context.json` and
@@ -274,12 +295,14 @@ These paths require a separately registered and approved implementation lane:
    license, freshness inputs, immutable skill record, sanitization, and an
    implementation-lane allowlist are approved.
 8. `tests/showcase-ecommerce/*.test.ts` — deterministic success and blocked cases
-   for missing or changed skill fields; missing, malformed, future, and over-age
-   source timestamps; wrong repository root; wrong Git common directory; wrong
-   worktree path or identity; `main`; detached or wrong branch; head mismatch;
-   missing or invalid approval; packet/approval mismatch; missing, malformed,
-   incorrectly bound, and elapsed expiry; authority conflict; UNKNOWN; budget;
-   invalid source mode; and forbidden operations.
+   for missing or changed skill fields; missing manifest freshness inputs;
+   missing, malformed, future, and over-age post-retrieval source timestamps;
+   wrong repository root; wrong Git common directory; wrong worktree path or
+   identity; `main`; detached or wrong branch; checkout-to-packet head mismatch;
+   absent approval; malformed approval; approval worktree/head mismatch;
+   packet/approval digest mismatch; missing, malformed, incorrectly bound, and
+   elapsed expiry; authority conflict; UNKNOWN; budget; invalid source mode; and
+   forbidden operations.
 9. `examples/showcase-ecommerce/` — judge-facing output and proof only after the
    implementation and test lane is approved.
 
@@ -311,12 +334,17 @@ The one-file proof must include:
 - exact changed-path output, Gatekeeper result, and `git diff --check`;
 - package command results and exit codes;
 - non-empty artifact byte count;
-- manifest ordering, immutable-skill gate, source-update freshness, full
-  worktree-identity-before-approval rule, approval-before-render rule,
-  packet-expiry rule, authority behavior, and output contracts reviewed;
+- manifest ordering; immutable-skill gate; manifest-level pre-retrieval
+  freshness inputs; post-retrieval per-record freshness validation;
+  checkout-to-packet worktree validation; separate approval binding;
+  approval-before-render; packet expiry; authority behavior; and output
+  contracts reviewed;
 - deterministic blocked evidence for wrong repository root, common directory,
-  worktree, `main`, wrong/detached branch, and head mismatch using
-  `WORKTREE_INVALID`;
+  worktree, `main`, wrong or detached branch, and checkout-to-packet head mismatch
+  using `WORKTREE_INVALID`;
+- separate deterministic blocked evidence for absent approval, malformed approval,
+  approval worktree/head mismatch, and approval/packet digest divergence using
+  the corresponding approval-specific codes;
 - confirmation that runtime, fixtures, tests, examples, dependencies, workflows,
   hooks, deployment, IAM, credentials, DataHub writes, and MG MCP writes did not
   change; and
@@ -334,19 +362,21 @@ allowlist. Its packet must require:
 - `OFFLINE_FIXTURE` as the first executable mode;
 - no network, credentials, private, or production metadata;
 - immutable skill ID, source, version, license, and digest before retrieval;
-- concrete `max_freshness_age`, deterministic `checked_at`, attributable
-  `source_updated_at`, and `checked_at - source_updated_at` validation;
+- concrete manifest `max_freshness_age` and deterministic `checked_at` before
+  retrieval, followed by attributable per-record `source_updated_at` and
+  `checked_at - source_updated_at` validation after retrieval;
 - exact source, context, packet, approval, expiry, and proof digests;
 - canonical repository root, Git common directory, absolute registered worktree
-  identity, a non-`main` approved branch, and exact head validated before
-  approval and rendering;
-- affirmative human approval bound to reviewer, disposition, packet digest,
-  complete worktree identity, and head;
+  identity, a non-`main` approved branch, and exact head validated against the
+  immutable packet before approval;
+- affirmative human approval separately bound to reviewer, disposition, packet
+  digest, approved worktree identity, and approved head;
 - timezone-aware unelapsed packet expiry;
 - no DataHub or MG MCP writes, production migration, or deployment;
 - deterministic success and blocked outputs;
 - independent review of code, fixture provenance, skill supply chain, privacy,
-  worktree identity, approval, expiry, and proof; and
+  freshness stage, worktree packet binding, approval binding, expiry, and proof;
+  and
 - a stop at proof return or any safety-critical UNKNOWN, conflict, freshness,
   skill, worktree, approval, or expiry failure.
 
@@ -371,14 +401,16 @@ This planning lane is done when:
 
 1. this artifact is non-empty, reviewable, and the only changed path;
 2. objective, judge value, reuse, canonical workflow, manifest ordering,
-   immutable skill, source-update freshness, full worktree identity,
+   immutable skill, manifest-level and post-retrieval freshness stages,
+   checkout-to-packet worktree identity, separate approval binding,
    approval-before-render, expiry, authority, outputs, future paths, validation,
    proof, blocked scope, implementation proposal, and stop condition are
    explicit;
 3. unverified datapack, live DataHub, skill, tool, and executable values remain
    `UNKNOWN` and block safety-critical paths;
-4. read-only, fixture-first, pre-retrieval supply-chain, non-`main` worktree,
-   human approval, expiry, and no-write boundaries are preserved;
+4. read-only, fixture-first, pre-retrieval supply-chain, post-retrieval freshness,
+   non-`main` worktree, human approval, expiry, and no-write boundaries are
+   preserved;
 5. Gatekeeper, non-empty, containment, diff, typecheck, test, and demo validation
    pass;
 6. the commit is pushed to the approved branch;
