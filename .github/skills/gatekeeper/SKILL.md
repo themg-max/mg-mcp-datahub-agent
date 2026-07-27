@@ -28,6 +28,13 @@ authority until its pull request merges.
   `GATEKEEPER_CURRENT_HEAD`, `GATEKEEPER_CHECKS_STATUS`,
   `GATEKEEPER_REVIEW_THREADS`, `GATEKEEPER_DISPOSITION`, and
   `GATEKEEPER_HUMAN_AUTHORIZED`. Gatekeeper never merges or authorizes a merge.
+  The one-time PR #4 `BOOTSTRAP_TRANSITION` is a separate merge-only path bound to
+  this exact repository, branch `fix/gatekeeper-lane-scoped-allowlists`, trusted base
+  `c9d9d851df3b1d523e9bc84f57f1aa676673fc8f`, externally supplied matching
+  expected/current `HEAD`, and the fixed six-file bootstrap scope. It requires
+  independent candidate-registry validation and the same successful CI, resolved
+  threads, approved disposition, and explicit human authorization evidence. It never
+  reads the candidate registry to authorize the bootstrap branch.
 - **cleanup**: validates only; requires REMOTE_VERIFIED identity and verified merged-PR
   evidence: `GATEKEEPER_PR_STATE` and `GATEKEEPER_MERGE_COMMIT`. It never deletes
   anything; cleanup remains a separate human-authorized action.
@@ -75,6 +82,5 @@ including an invalid APPROVED-lane allowlist, exits 15.
 There is no self-authorization. Future lanes follow the serialized workflow
 `registry intake PR -> merge -> actual branch from updated main`; closeout reuses
 `chore/lane-registry-intake`, with one active intake PR at a time. This repair PR is a
-one-time `BOOTSTRAP_TRANSITION`, authorized only by independent GitHub review, CI, Reviewer
-Disposition, and explicit human merge authorization. Its proposed lane becomes authority
-only after merge.
+one-time `BOOTSTRAP_TRANSITION`, authorized only by the bounded merge path described
+above. Its proposed lane becomes authority only after merge.

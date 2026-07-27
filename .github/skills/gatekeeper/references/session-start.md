@@ -49,4 +49,9 @@ There is no self-authorization. Use the serialized workflow
 `registry intake PR -> merge -> actual branch from updated main`; closeout reuses
 `chore/lane-registry-intake`, and only one intake PR may be active. The current repair is a
 one-time `BOOTSTRAP_TRANSITION` authorized only by independent GitHub review, CI, Reviewer
-Disposition, and explicit human merge authorization. Hooks are optional and may be absent.
+Disposition, and explicit human merge authorization. The merge-only bootstrap path is bound
+to PR 4, the exact repair branch, trusted base
+`c9d9d851df3b1d523e9bc84f57f1aa676673fc8f`, matching externally supplied expected/current
+`HEAD`, and the fixed six-file scope. It independently validates the candidate registry at
+`HEAD` but never uses candidate content to authorize the branch. Hooks are optional and may
+be absent.

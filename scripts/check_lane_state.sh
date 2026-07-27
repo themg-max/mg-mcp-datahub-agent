@@ -6,6 +6,17 @@ expected_commit="1e5e7a19bfff280d351373ae43c41cefeaab56f9"
 expected_package="@themg/contextops-datahub-agent"
 architecture_artifact="docs/datahub-skill-execution-architecture.md"
 registry_path=".ai/active-lanes/datahub-devpost.json"
+bootstrap_branch="fix/gatekeeper-lane-scoped-allowlists"
+bootstrap_pr="4"
+bootstrap_base="c9d9d851df3b1d523e9bc84f57f1aa676673fc8f"
+bootstrap_paths=(
+  ".ai/active-lanes/README.md"
+  ".ai/active-lanes/datahub-devpost.json"
+  ".github/skills/gatekeeper/SKILL.md"
+  ".github/skills/gatekeeper/references/session-start.md"
+  ".github/skills/gatekeeper/references/session-stop.md"
+  "scripts/check_lane_state.sh"
+)
 
 case "$mode" in
   inspect|mutation|merge|cleanup) ;;
@@ -326,6 +337,173 @@ for (const lane of registry.lanes) {
   candidate_registry=""
 }
 
+validate_bootstrap_candidate_contract() {
+  node -e '
+const fs = require("fs");
+const [registryPath, branch, owner, ...fixedPaths] = process.argv.slice(1);
+const registry = JSON.parse(fs.readFileSync(registryPath, "utf8"));
+const branchFields = ["durable_branch", "managed_workspace_branch", "branch"];
+const matches = registry.lanes.filter((lane) =>
+  lane && branchFields.some((field) => lane[field] === branch)
+);
+if (matches.length !== 1) process.exit(2);
+const lane = matches[0];
+if (lane.status !== "APPROVED" || lane.owner !== owner ||
+    !Array.isArray(lane.allowed_paths) ||
+    lane.allowed_paths.length !== fixedPaths.length ||
+    fixedPaths.some((entry, index) => lane.allowed_paths[index] !== entry)) {
+  process.exit(2);
+}
+' "$candidate_registry" "$bootstrap_branch" "governance-implementation-owner" \
+    "${bootstrap_paths[@]}" >/dev/null 2>&1 || {
+      printf '%s\n' 'ERROR candidate registry cannot authorize the fixed bootstrap contract' >&2
+      exit 15
+    }
+}
+
+validate_bootstrap_scope() {
+  bootstrap_committed_file="$(mktemp "${TMPDIR:-/tmp}/gatekeeper-bootstrap-committed.XXXXXX")" || {
+    printf '%s\n' 'ERROR unable to buffer bootstrap committed diff' >&2
+    exit 15
+  }
+  if ! git -C "$root" diff --name-status -z "$bootstrap_base" HEAD >"$bootstrap_committed_file" 2>/dev/null; then
+    rm -f "$bootstrap_committed_file"
+    printf '%s\n' 'ERROR unable to collect bootstrap committed diff' >&2
+    exit 15
+  fi
+
+  bootstrap_paths_seen=()
+  while IFS= read -r -d '' status_code; do
+    case "${status_code:0:1}" in
+      R|C)
+        IFS= read -r -d '' src || {
+          rm -f "$bootstrap_committed_file"
+          printf '%s\n' 'ERROR malformed bootstrap rename source record' >&2
+          exit 15
+        }
+        IFS= read -r -d '' dst || {
+          rm -f "$bootstrap_committed_file"
+          printf '%s\n' 'ERROR malformed bootstrap rename destination record' >&2
+          exit 15
+        }
+        bootstrap_paths_seen+=("$src" "$dst")
+        ;;
+      *)
+        IFS= read -r -d '' path || {
+          rm -f "$bootstrap_committed_file"
+          printf '%s\n' 'ERROR malformed bootstrap committed path record' >&2
+          exit 15
+        }
+        bootstrap_paths_seen+=("$path")
+        ;;
+    esac
+  done <"$bootstrap_committed_file"
+  rm -f "$bootstrap_committed_file"
+
+  bootstrap_status_file="$(mktemp "${TMPDIR:-/tmp}/gatekeeper-bootstrap-status.XXXXXX")" || {
+    printf '%s\n' 'ERROR unable to buffer bootstrap worktree status' >&2
+    exit 15
+  }
+  git -C "$root" status --porcelain=v1 -z --untracked-files=all >"$bootstrap_status_file"
+  bootstrap_status_result=$?
+  if [ "$bootstrap_status_result" -ne 0 ]; then
+    rm -f "$bootstrap_status_file"
+    printf '%s\n' 'ERROR unable to collect bootstrap worktree status' >&2
+    exit 15
+  fi
+  while IFS= read -r -d '' status_record; do
+    status_code="${status_record:0:2}"
+    bootstrap_paths_seen+=("${status_record:3}")
+    if [[ "$status_code" == *R* || "$status_code" == *C* ]]; then
+      IFS= read -r -d '' source_path || {
+        rm -f "$bootstrap_status_file"
+        printf '%s\n' 'ERROR malformed bootstrap worktree rename record' >&2
+        exit 15
+      }
+      bootstrap_paths_seen+=("$source_path")
+    fi
+  done <"$bootstrap_status_file"
+  rm -f "$bootstrap_status_file"
+
+  unique_bootstrap_paths=()
+  for changed_path in "${bootstrap_paths_seen[@]}"; do
+    [ -n "$changed_path" ] || continue
+    path_seen=false
+    for existing_path in "${unique_bootstrap_paths[@]}"; do
+      if [ "$changed_path" = "$existing_path" ]; then
+        path_seen=true
+        break
+      fi
+    done
+    [ "$path_seen" = true ] || unique_bootstrap_paths+=("$changed_path")
+  done
+
+  if [ "${#unique_bootstrap_paths[@]}" -ne "${#bootstrap_paths[@]}" ]; then
+    printf '%s\n' 'ERROR bootstrap scope must contain exactly the fixed six files' >&2
+    exit 14
+  fi
+  for required_path in "${bootstrap_paths[@]}"; do
+    path_seen=false
+    for changed_path in "${unique_bootstrap_paths[@]}"; do
+      if [ "$required_path" = "$changed_path" ]; then
+        path_seen=true
+        break
+      fi
+    done
+    if [ "$path_seen" != true ]; then
+      printf 'ERROR bootstrap scope is missing required path: %s\n' "$required_path" >&2
+      exit 14
+    fi
+  done
+}
+
+validate_bootstrap_transition() {
+  if [ "$identity_mode" != "REMOTE_VERIFIED" ]; then
+    printf '%s\n' 'ERROR bootstrap transition requires exact remote repository identity' >&2
+    exit 15
+  fi
+  if [ "$branch" != "$bootstrap_branch" ]; then
+    printf '%s\n' 'ERROR bootstrap transition branch is not authorized' >&2
+    exit 15
+  fi
+  if [ "${GATEKEEPER_TRANSITION:-}" != "BOOTSTRAP_TRANSITION" ]; then
+    printf '%s\n' 'ERROR bootstrap transition classification is missing or invalid' >&2
+    exit 17
+  fi
+  if [ "${GATEKEEPER_BOOTSTRAP_PR:-}" != "$bootstrap_pr" ]; then
+    printf '%s\n' 'ERROR bootstrap transition PR number is not authorized' >&2
+    exit 17
+  fi
+  if [ "${GATEKEEPER_BOOTSTRAP_BASE:-}" != "$bootstrap_base" ]; then
+    printf '%s\n' 'ERROR bootstrap transition trusted base is not authorized' >&2
+    exit 15
+  fi
+  actual_head="$(git -C "$root" rev-parse --verify HEAD^{commit} 2>/dev/null || true)"
+  if [[ ! "${GATEKEEPER_EXPECTED_HEAD:-}" =~ ^[0-9A-Fa-f]{40}$ ]] ||
+     [ "${GATEKEEPER_CURRENT_HEAD:-}" != "$actual_head" ] ||
+     [ "$GATEKEEPER_EXPECTED_HEAD" != "$actual_head" ]; then
+    printf '%s\n' 'ERROR bootstrap transition expected/current head does not match HEAD' >&2
+    exit 17
+  fi
+  if [ "${GATEKEEPER_CHECKS_STATUS:-}" != "SUCCESS" ] ||
+     [ "${GATEKEEPER_REVIEW_THREADS:-}" != "RESOLVED" ] ||
+     { [ "${GATEKEEPER_DISPOSITION:-}" != "APPROVE" ] &&
+       [ "${GATEKEEPER_DISPOSITION:-}" != "APPROVE_WITH_FOLLOW_UP" ]; } ||
+     [ "${GATEKEEPER_HUMAN_AUTHORIZED:-}" != "true" ]; then
+    printf '%s\n' 'ERROR bootstrap transition merge evidence is incomplete or invalid' >&2
+    exit 17
+  fi
+  if ! git -C "$root" merge-base --is-ancestor "$bootstrap_base" HEAD 2>/dev/null; then
+    printf '%s\n' 'ERROR bootstrap transition trusted base is not an ancestor of HEAD' >&2
+    exit 15
+  fi
+  validate_bootstrap_scope
+  validate_candidate_registry
+  validate_bootstrap_candidate_contract
+  printf '%s\n' 'result=PASS (bootstrap transition evidence complete; no merge performed)'
+  exit 0
+}
+
 resolve_authority
 lane_id="NONE"
 lane_status="UNKNOWN"
@@ -495,6 +673,10 @@ if [ "$mode" = "mutation" ]; then
 
   printf '%s\n' 'result=PASS (validation only; no mutation performed)'
   exit 0
+fi
+
+if [ "$mode" = "merge" ] && [ "${GATEKEEPER_TRANSITION:-}" = "BOOTSTRAP_TRANSITION" ]; then
+  validate_bootstrap_transition
 fi
 
 if [ "$identity_mode" != "REMOTE_VERIFIED" ]; then

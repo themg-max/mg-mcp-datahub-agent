@@ -24,7 +24,10 @@ Mainline registry state is authoritative; the branch worktree registry is
 PR at a time. Hooks are optional and may be absent.
 
 The current repair PR is a one-time `BOOTSTRAP_TRANSITION` authorized only by independent
-GitHub review, CI, Reviewer Disposition, and explicit human merge authorization. Do not
+GitHub review, CI, Reviewer Disposition, and explicit human merge authorization. Its
+merge-only path is fixed to PR 4, the exact repair branch, trusted base
+`c9d9d851df3b1d523e9bc84f57f1aa676673fc8f`, matching expected/current `HEAD`, and the
+six authorized files. Candidate validation is independent and non-authorizing. Do not
 report its proposed lane as durable authority before merge.
 
 Chat, Cloud workspace state, and terminal output alone never prove completion. Completion
