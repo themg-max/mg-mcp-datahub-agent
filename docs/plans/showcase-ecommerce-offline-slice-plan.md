@@ -146,27 +146,38 @@ does not match the exact current revision is `PACKET_APPROVAL_MISMATCH`.
 21. Render only through a pure in-memory function that returns strings or bytes
     and has no filesystem, subprocess, Git, network, DataHub-write, or
     MG-MCP-write capability.
-22. Issue one immutable generated-artifact manifest record for the exact SQL
-    bytes and one for the exact YAML bytes. Each record uses the existing shared
-    schema spine and records a stable artifact `record_id`, media type, byte
-    length, and SHA-256 `content_digest`. Reference both records from packet and
-    proof `related_artifacts`; carry each record and its validation outcome
-    through existing proof `validation` evidence. Missing artifact evidence is
-    `PROOF_INCOMPLETE`.
-23. Immediately before emission, recompute SHA-256 for the exact SQL and YAML
-    bytes being returned and require equality with their recorded artifact
-    digests and byte lengths. A mismatch is `DIGEST_INVALID`; do not emit.
-24. Immediately after rendering and artifact validation, run fresh Git
+22. Issue an immutable generated-artifact manifest record for each exact SQL and
+    YAML payload. Each manifest uses the existing shared schema spine and records
+    a stable manifest `record_id`, media type, byte length, and its canonical
+    `content_digest`: the RFC 8785 JCS SHA-256 of that manifest record with only
+    `content_digest` omitted. This manifest digest authenticates the manifest,
+    not the payload bytes.
+23. Issue a separate immutable payload artifact record for each SQL and YAML
+    payload. The existing field name `content_digest` on this payload record is
+    the SHA-256 digest of the exact payload bytes; it is not the manifest
+    record's canonical digest. Each payload record also carries a stable
+    `record_id`, media type, and byte length. Reference the exact manifest and
+    payload records from packet and proof `related_artifacts`; carry both records
+    and both validation outcomes through existing proof `validation` evidence.
+    Missing manifest or payload evidence is `PROOF_INCOMPLETE`.
+24. Immediately before emission, recompute the SQL payload SHA-256 and byte
+    length, recompute the YAML payload SHA-256 and byte length, and compare each
+    with its payload artifact record's `content_digest` and byte length.
+    Independently recompute and validate each manifest record's canonical
+    `content_digest`, and require proof `related_artifacts` to reference the
+    exact manifest and payload records. A manifest digest, payload digest, or
+    byte-length mismatch is `DIGEST_INVALID`; do not emit.
+25. Immediately after rendering and artifact validation, run fresh Git
     identity/status, scope, inventory, expiry, tool/command, packet-lineage,
     artifact, and digest checks. Any changed path outside the packet allowlist is
     `SCOPE_VIOLATION`; other worktree drift is `WORKTREE_INVALID`.
-25. Issue the `validated` packet revision with `supersedes` set to the executing
+26. Issue the `validated` packet revision with `supersedes` set to the executing
     record and exact artifact and validation evidence, repeat the full gate, and
     obtain fresh affirmative approval for the exact validated packet.
-26. Build proof using the pairwise bindings below. Emit only when the final proof
+27. Build proof using the pairwise bindings below. Emit only when the final proof
     and validated packet revision agree exactly and all approval, expiry, scope,
     inventory, tool, command, artifact, and no-write checks pass.
-27. On any failure, discard the in-memory proposal, preserve attributable attempt,
+28. On any failure, discard the in-memory proposal, preserve attributable attempt,
     artifact, and failure evidence, return the exact blocked code, and stop.
 
 ## Retrieval budgets and freshness
@@ -237,16 +248,18 @@ The final proof must equal the exact validated packet revision for:
 - literal writable paths, readable paths, tools, denied tools, and commands;
 - packet status, execution status, expiry, validation, and failure fields;
 - packet `related_artifacts`, including the immutable SQL and YAML artifact
-  manifest record IDs;
+  manifest and payload record IDs;
 - every approval field, including reviewer, disposition, approved head,
   `approved_packet_digest`, and `approved_content_digest`.
 
 The proof records the exact validated packet through `packet_binding`; related
 records remain attributable through supported `supersedes` and
-`related_artifacts` evidence. The SQL and YAML artifact records must carry the
-same stable IDs, media types, byte lengths, and content digests into the proof's
-`related_artifacts` and `validation` evidence. Earlier approvals do not
-authorize the final revision.
+`related_artifacts` evidence. The SQL and YAML manifest records must carry their
+canonical `content_digest`, while the separate SQL and YAML payload records must
+carry `content_digest` for the exact payload bytes. Both record classes must
+carry stable IDs, media types, and byte lengths into proof
+`related_artifacts` and both validation outcomes into existing `validation`
+evidence. Earlier approvals do not authorize the final revision.
 
 ### Context to packet and proof
 
@@ -272,10 +285,11 @@ Use the existing proof fields `context_evidence`, `pre_retrieval_evidence`,
 `packet_binding`. These fields carry attributable context, retrieval, source,
 inventory, execution, validation, scope, and reviewer evidence without adding
 dedicated packet-revision-chain or emitted-proposal fields. Artifact validation
-evidence references each immutable SQL/YAML artifact record and records the
-recomputed exact-byte digest and byte-length comparison outcome. Missing
-artifact evidence is `PROOF_INCOMPLETE`; a digest or length mismatch is
-`DIGEST_INVALID`.
+evidence references each exact SQL/YAML manifest and payload record and records
+both the independent manifest canonical-digest result and the recomputed
+exact-byte payload digest and byte-length comparison result. Missing manifest or
+payload evidence is `PROOF_INCOMPLETE`; an invalid manifest digest, payload
+digest, or byte length is `DIGEST_INVALID`.
 
 Any mismatch within an applicable pair is routed to its controlling exact code:
 `CONNECTION_MISMATCH`, `RETRIEVAL_EVIDENCE_INVALID`, `TOOL_INVENTORY_INVALID`,
@@ -313,8 +327,9 @@ A success result includes exact request and mode, manifest and observed fixture
 bindings, immutable skill, retrieval attempts, declared and observed budgets,
 canonical context/provenance/freshness, the exact final validated
 `packet_binding`, fresh final approval, worktree and transition evidence,
-authorized tool/command evidence, immutable SQL/YAML artifact manifest records
-with exact media types, byte lengths, and SHA-256 content digests, and the
+authorized tool/command evidence, immutable SQL/YAML manifest and payload
+artifact records with exact media types, byte lengths, canonical manifest
+`content_digest` values, and payload-byte `content_digest` values, and the
 supported proof fields
 `context_evidence`, `pre_retrieval_evidence`, `source_attribution`,
 `tool_inventory`, `execution_evidence`, `validation`, `scope_check`, and
@@ -351,9 +366,13 @@ evidence not being `RETRIEVAL_EVIDENCE_INVALID`; missing or mismatched attempt
 evidence being `RETRIEVAL_EVIDENCE_INVALID`; source freshness; screening; clean
 worktree and scope precedence; side-effect-free rendering; expiry before every
 approval and transition; proposed-record refinement via `supersedes`; packet
-revision digest continuity with exact predecessor links; immutable SQL/YAML
-artifact records with media types, byte lengths, and exact SHA-256 binding;
-missing artifact evidence; artifact digest or length mismatch; fresh approval
+revision digest continuity with exact predecessor links; valid SQL/YAML manifest
+and payload artifact records with media types, byte lengths, canonical manifest
+`content_digest` values, exact payload-byte `content_digest` values, and
+independent validation; missing manifest or payload evidence; invalid manifest
+digest; SQL or YAML payload mismatch; payload byte-length mismatch; swapped SQL
+and YAML payload digests; missing payload digest; payload changed after
+validation; fresh approval
 for `approved`, `executing`, and `validated`; rejection of every forbidden or
 regressive transition edge; exact final packet-to-proof approval binding;
 context-to-packet/proof pairwise equality; manifest-to-packet/proof pairwise
