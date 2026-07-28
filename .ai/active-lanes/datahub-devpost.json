@@ -84,14 +84,29 @@
     },
     {
       "id": "datahub-showcase-ecommerce-offline-slice-plan",
-      "status": "APPROVED",
+      "status": "VERIFIED",
+      "pr": 13,
+      "merge_commit": "d4d3946dd703f8218c049ac2a76ebbf8df5b58bb",
       "durable_branch": "plan/datahub-showcase-ecommerce-offline-slice",
       "owner": "datahub-offline-slice-planning-owner",
       "artifact": "docs/plans/showcase-ecommerce-offline-slice-plan.md",
       "allowed_paths": [
         "docs/plans/showcase-ecommerce-offline-slice-plan.md"
       ],
-      "note": "Proposed planning-only lane for one deterministic fixture-first slice from synthetic showcase-ecommerce metadata through governed context, bounded work packet, safe customer-email proposal or blocked result, and reviewable proof. The single allowed path is the declared planning artifact because existing CLI, adapter, work-packet, fixture, test, example, and documentation surfaces were inspected read-only; runtime files are not writable in this lane. Live DataHub connectivity, credentials, private endpoints, DataHub writes, MG MCP writes, MCP server implementation, deployment, IAM, billing, workflow changes, dependency changes, production dbt changes, and autonomous merge remain blocked."
+      "note": "Completed planning-only lane. PR #13 merged as d4d3946dd703f8218c049ac2a76ebbf8df5b58bb. This VERIFIED lane no longer authorizes mutation; Issue #14 reconciliation is the sole approved successor for the plan artifact. Runtime implementation remains unauthorized."
+    },
+    {
+      "id": "datahub-showcase-ecommerce-offline-slice-reconciliation",
+      "status": "APPROVED",
+      "durable_branch": "reconcile/issue-14-showcase-plan",
+      "owner": "themg-max",
+      "artifact": "docs/plans/showcase-ecommerce-offline-slice-plan.md",
+      "issue": 14,
+      "trusted_base": "d4d3946dd703f8218c049ac2a76ebbf8df5b58bb",
+      "allowed_paths": [
+        "docs/plans/showcase-ecommerce-offline-slice-plan.md"
+      ],
+      "note": "Documentation-only reconciliation lane for Issue #14. It may align the merged showcase-ecommerce offline-slice plan with the existing governed_development_work_packet and governed_development_proof version 1.0 schemas. Runtime implementation, fixture changes, examples, dependencies, workflows, hooks, controlling-schema changes, deployment, IAM, credentials, private or production data, DataHub writes, MG MCP writes, and autonomous merge remain blocked."
     }
   ]
 }
