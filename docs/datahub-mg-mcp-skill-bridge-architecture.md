@@ -152,7 +152,7 @@ authority_status: authoritative|proposed|unverified|conflict|unknown
 execution_status: not_started|blocked|approved|executing|validated|failed
 retrieval_status: not_started|retrieving|complete|partial|empty|timeout|failed
 failures:
-  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|PACKET_APPROVAL_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|RETRIEVAL_EVIDENCE_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED|CONNECTION_MISMATCH|SKILL_BINDING_FAILED|SCHEMA_UNSUPPORTED
+  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|PACKET_APPROVAL_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|RETRIEVAL_EVIDENCE_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED|CONNECTION_MISMATCH|SKILL_BINDING_FAILED
     message: <human-readable-detail>
     blocking: true|false
     source: DataHub|MG MCP|repository|orchestrator|proof
@@ -306,7 +306,7 @@ authority_status: authoritative|proposed|unverified|conflict|unknown
 execution_status: not_started|blocked|approved|executing|validated|failed
 retrieval_status: not_started|retrieving|complete|partial|empty|timeout|failed
 failures:
-  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|PACKET_APPROVAL_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|RETRIEVAL_EVIDENCE_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED|CONNECTION_MISMATCH|SKILL_BINDING_FAILED|SCHEMA_UNSUPPORTED
+  - code: APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|PACKET_APPROVAL_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|RETRIEVAL_EVIDENCE_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED|CONNECTION_MISMATCH|SKILL_BINDING_FAILED
     message: <human-readable-detail>
     blocking: true|false
     source: DataHub|MG MCP|repository|orchestrator|proof
@@ -989,7 +989,8 @@ review:
 extension, not a major schema version. It preserves the meaning and
 serialization rules of all existing `1.0` fields, but it is not
 consumer-substitutable with `1.0`: the new evidence is required for a complete
-`1.1` proof. A `1.0` consumer must reject a `1.1` proof with
+`1.1` proof. Before accepting or interpreting a proof record, a consumer that
+does not support its proof schema version must reject it with
 `SCHEMA_UNSUPPORTED`; it must not ignore the new carriers or silently downgrade
 the record. A consumer that supports `1.1` must require
 `artifact_evidence`, `packet_revision_lineage`, and `proof_evidence_graph`, and
@@ -1086,6 +1087,28 @@ creation does not. `proof.approval.approved_packet_record_id`,
 `lineage_authorization_validation` is `pass` only when the terminal revision's
 `authorization_binding` digests match the proof's approval fields.
 
+Normative approval validation resolves
+`proof.approval.approved_packet_record_id` to exactly one
+`packet_revision_lineage.revisions` entry. That entry must have `sequence: 2`,
+`revision_label: approved`, and `status: approved`. The verifier resolves that
+entry's `record_binding`, computes the RFC 8785 JCS SHA-256 digest of the
+resolved approved record's `approval_digest_payload`, and compares it with
+`proof.approval.approved_packet_digest`. This comparison must not use
+`packet_binding.record_id`, the terminal validated packet, or the terminal
+packet's approval payload. Separately, the verifier resolves
+`packet_binding`, requires its `record_id` to equal
+`terminal_packet_record_id`, and validates the terminal revision through its
+`record_binding`, `terminal_packet_record_id`, and
+`authorization_binding`.
+
+Approval-validation failure precedence is deterministic: a missing or
+unresolved required binding or digest returns `PROOF_INCOMPLETE`; a present
+malformed or non-verifying digest, including changed payload bytes without a
+recomputed digest, returns `DIGEST_INVALID`; only well-formed,
+cryptographically verified evidence bound to the wrong approved record,
+approved content digest, or approved head returns
+`PACKET_APPROVAL_MISMATCH`.
+
 Missing, skipped, duplicated, cyclic, reordered, substituted, or
 digest-mismatched revisions fail closed. Duplicate revision identity is
 checked by `record_id` (not by `record_type` or status), and a revision
@@ -1166,12 +1189,17 @@ The deterministic validation cases for this extension are:
   packet revision returns `PROOF_INCOMPLETE`.
 5. Changing one payload byte, byte length, media-bound canonical field, JCS
   serialization, digest case, or digest value returns `DIGEST_INVALID`.
-6. Changing an approval payload field, approved packet digest, approved
-  content digest, or approved worktree head returns
+6. A missing required approval binding or `approved_packet_digest` returns
+  `PROOF_INCOMPLETE`.
+7. Changing approval-payload bytes without recomputing the declared digest,
+  supplying a malformed `approved_packet_digest`, or supplying an
+  `approved_packet_digest` that does not verify returns `DIGEST_INVALID`.
+8. Only after the approval digest verifies, binding it to the wrong approved
+  record, approved content digest, or approved worktree head returns
   `PACKET_APPROVAL_MISMATCH`.
-7. Presenting a `1.1` proof to a consumer that supports only `1.0` returns
+9. Presenting a `1.1` proof to a consumer that supports only `1.0` returns
   `SCHEMA_UNSUPPORTED`; no silent field dropping or downgrade is permitted.
-8. Empty `artifact_evidence` passes only with an empty
+10. Empty `artifact_evidence` passes only with an empty
   `packet.required_artifacts`; a claimed artifact without evidence, a
   noncanonical collection order, an unresolved declared graph identity, or a
   graph node unreachable from the root returns `PROOF_INCOMPLETE`.
@@ -1200,9 +1228,15 @@ The proof `context_budget.limits` must equal the packet
 `approved_packet_digest` and `approved_content_digest`, and
 `approval.approved_head_sha` must equal both the packet's validated worktree
 head and the proof's validated worktree head. `approval.approved_packet_digest`
-must equal the packet's immutable `approval_digest_payload` JCS digest, and
+must equal the RFC 8785 JCS SHA-256 digest of the approved revision resolved
+from `proof.approval.approved_packet_record_id`, not the terminal packet's
+payload or `packet_binding.record_id`, and
 `approval.approved_content_digest` must equal the approved revision's
-`content_digest` captured at approval time; otherwise proof fails with
+`content_digest` captured at approval time. A missing or unresolved required
+binding or digest fails with `PROOF_INCOMPLETE`; a present malformed or
+non-verifying digest, including changed payload bytes without recomputation,
+fails with `DIGEST_INVALID`; only verified evidence bound to the wrong approved
+record, approved content digest, or approved head fails with
 `PACKET_APPROVAL_MISMATCH`. The proof-only fields
 `approved_packet_record_id`, `terminal_packet_record_id`, and
 `lineage_authorization_validation` derive from `packet_revision_lineage`; they
@@ -1337,19 +1371,22 @@ service-account operation, or credential mutation is authorized.
 
 ## 13. Failure, timeout, empty, conflict, and UNKNOWN handling
 
-The shared typed `failures[].code` enum is identical in the context envelope,
-work packet, and proof schema:
-`APPROVAL_REQUIRED|APPROVAL_INVALID|APPROVAL_HEAD_MISMATCH|PACKET_APPROVAL_MISMATCH|BUDGET_EXCEEDED|DIGEST_INVALID|WORKTREE_INVALID|FRESHNESS_EXCEEDED|TOOL_INVENTORY_INVALID|AUTHORITY_CONFLICT|PROOF_INCOMPLETE|PROOF_INVALID|RETRIEVAL_EVIDENCE_INVALID|PACKET_EXPIRED|SCOPE_VIOLATION|FORBIDDEN_OPERATION_ATTEMPTED|UNAUTHORIZED_TOOL|UNAUTHORIZED_COMMAND|SOURCE_MODE_BLOCKED|SCREENING_REQUIRED|SCREENING_FAILED|CONNECTION_MISMATCH|SKILL_BINDING_FAILED|SCHEMA_UNSUPPORTED`.
+Each schema owns its own typed `failures[].code` enum. Context schema `1.0`
+and work-packet schema `1.0` do not declare `SCHEMA_UNSUPPORTED`.
+Proof schema `1.1` declares it only for a proof consumer that rejects an
+unsupported proof version before accepting or interpreting the proof; no new
+context or work-packet schema version is introduced by this rule.
 
-The proof evidence failure matrix is deterministic and uses the first matching
-condition in this order:
+After proof-version support is established, the proof evidence failure matrix
+is deterministic and uses the first matching condition in this order:
 
 | Condition | Failure code |
 | --- | --- |
-| Consumer does not support proof schema `1.1` | `SCHEMA_UNSUPPORTED` |
-| A required canonical-record, approval-payload, or payload-byte digest field is missing | `PROOF_INCOMPLETE` |
-| A supplied canonical-record, approval-payload, or payload-byte digest, or byte length, is malformed or does not verify | `DIGEST_INVALID` |
-| Well-formed and verified approval evidence differs from the expected packet, content, or worktree binding | `PACKET_APPROVAL_MISMATCH` |
+| A required approval binding or digest is missing or unresolved | `PROOF_INCOMPLETE` |
+| A supplied approval digest is malformed or does not verify, including changed payload bytes without recomputation | `DIGEST_INVALID` |
+| Well-formed and cryptographically verified approval evidence is bound to the wrong approved record, approved content digest, or approved head | `PACKET_APPROVAL_MISMATCH` |
+| A required canonical-record or payload-byte digest field is missing | `PROOF_INCOMPLETE` |
+| A supplied canonical-record or payload-byte digest, or byte length, is malformed or does not verify | `DIGEST_INVALID` |
 | Required artifact, artifact identity, media type, proof graph node, packet revision, edge, status, or `supersedes` evidence is missing or structurally invalid | `PROOF_INCOMPLETE` |
 | Packet revision or proof graph contains a duplicate identity, skipped or reordered entry, substitution, backward reference, or cycle | `PROOF_INCOMPLETE` |
 
@@ -1357,9 +1394,11 @@ condition in this order:
   `APPROVAL_HEAD_MISMATCH` when affirmative approval, reviewer identity,
   timestamp, disposition, or exact head binding is absent or invalid.
 - **Packet approval:** use `PACKET_APPROVAL_MISMATCH` only when well-formed,
-  verified approval evidence differs from the expected packet, content, or
-  validated proof worktree binding. A malformed approval digest is
-  `DIGEST_INVALID`, and a missing approval digest is `PROOF_INCOMPLETE`.
+  cryptographically verified approval evidence is bound to the wrong approved
+  record, approved content digest, or approved head. A malformed or
+  non-verifying approval digest, including changed payload bytes without
+  recomputation, is `DIGEST_INVALID`; a missing or unresolved required approval
+  binding or digest is `PROOF_INCOMPLETE`.
 - **Budget:** use `BUDGET_EXCEEDED` when any declared entity, lineage depth,
   lineage edge, record, token, freshness, or timeout limit is exceeded.
 - **Digest:** a missing required digest field is `PROOF_INCOMPLETE`; use
@@ -1378,9 +1417,9 @@ condition in this order:
 - **Artifact and lineage evidence:** apply the deterministic proof evidence
   failure matrix above. Repeated artifact `record_type` is valid when record
   and node identity are unique; repeated identity is not.
-- **Schema compatibility:** use `SCHEMA_UNSUPPORTED` when a consumer does not
-  support the proof schema version; never drop unknown evidence fields or
-  silently downgrade a `1.1` proof to `1.0`.
+- **Schema compatibility:** a proof consumer uses `SCHEMA_UNSUPPORTED` before
+  accepting or interpreting an unsupported proof schema version; never drop
+  unknown evidence fields or silently downgrade a `1.1` proof to `1.0`.
 - **Scope:** use `SCOPE_VIOLATION` when a changed path is not a literal member
   of the approved writable paths.
 - **Expiration:** use `PACKET_EXPIRED` when `expires_at` is missing, malformed,
