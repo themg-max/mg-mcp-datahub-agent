@@ -107,6 +107,19 @@
         "docs/plans/showcase-ecommerce-offline-slice-plan.md"
       ],
       "note": "Documentation-only reconciliation lane for Issue #14. It may align the merged showcase-ecommerce offline-slice plan with the existing governed_development_work_packet and governed_development_proof version 1.0 schemas. Runtime implementation, fixture changes, examples, dependencies, workflows, hooks, controlling-schema changes, deployment, IAM, credentials, private or production data, DataHub writes, MG MCP writes, and autonomous merge remain blocked."
+    },
+    {
+      "id": "datahub-governed-proof-artifact-lineage-schema",
+      "status": "APPROVED",
+      "durable_branch": "schema/issue-17-governed-proof-evidence",
+      "owner": "themg-max",
+      "artifact": "docs/datahub-mg-mcp-skill-bridge-architecture.md",
+      "issue": 17,
+      "trusted_base": "5a72661440ef5959193636a67d7b20d976f14fa1",
+      "allowed_paths": [
+        "docs/datahub-mg-mcp-skill-bridge-architecture.md"
+      ],
+      "note": "Controlling-schema lane for Issue #17. Defines schema-valid immutable artifact evidence, payload-byte evidence, complete packet-lineage evidence, external-record digest binding, compatibility, and fail-closed behavior. PR #16 and Issue #14 remain blocked until this lane is reviewed and merged. Runtime implementation, fixtures, examples, dependencies, workflows, hooks, deployment, IAM, credentials, private or production data, DataHub writes, MG MCP writes, and autonomous merge remain blocked."
     }
   ]
 }
