@@ -84,14 +84,16 @@
     },
     {
       "id": "datahub-showcase-ecommerce-offline-slice-plan",
-      "status": "APPROVED",
+      "status": "VERIFIED",
+      "pr": 13,
+      "merge_commit": "d4d3946dd703f8218c049ac2a76ebbf8df5b58bb",
       "durable_branch": "plan/datahub-showcase-ecommerce-offline-slice",
       "owner": "datahub-offline-slice-planning-owner",
       "artifact": "docs/plans/showcase-ecommerce-offline-slice-plan.md",
       "allowed_paths": [
         "docs/plans/showcase-ecommerce-offline-slice-plan.md"
       ],
-      "note": "Proposed planning-only lane for one deterministic fixture-first slice from synthetic showcase-ecommerce metadata through governed context, bounded work packet, safe customer-email proposal or blocked result, and reviewable proof. The single allowed path is the declared planning artifact because existing CLI, adapter, work-packet, fixture, test, example, and documentation surfaces were inspected read-only; runtime files are not writable in this lane. Live DataHub connectivity, credentials, private endpoints, DataHub writes, MG MCP writes, MCP server implementation, deployment, IAM, billing, workflow changes, dependency changes, production dbt changes, and autonomous merge remain blocked."
+      "note": "Completed planning-only lane. PR #13 merged as d4d3946dd703f8218c049ac2a76ebbf8df5b58bb. This VERIFIED lane no longer authorizes mutation; Issue #14 reconciliation is the sole approved successor for the plan artifact. Runtime implementation remains unauthorized."
     },
     {
       "id": "datahub-showcase-ecommerce-offline-slice-reconciliation",
