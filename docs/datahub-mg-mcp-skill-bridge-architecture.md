@@ -1051,8 +1051,10 @@ and successor record IDs, both content digests, both statuses, the successor's
 `supersedes`, and the expected transition through
 `predecessor_binding_validation`, `successor_binding_validation`,
 `digest_validation`, `status_transition_validation`,
-`supersedes_validation`, and `authorization_carry_forward_validation`; all edge
-results must pass before `aggregate_validation` can pass. The revision sequence
+`supersedes_validation`, and, only for the post-approval `approve`-to-`execute`
+and `execute`-to-`validate` edges, `authorization_carry_forward_validation`;
+all required edge results must pass before `aggregate_validation` can pass. The
+revision sequence
 is independent of proof dependencies and is never inferred from node type or
 status alone.
 
@@ -1168,12 +1170,15 @@ ordering fails with `PROOF_INCOMPLETE`.
 
 All edge bindings, edge uniqueness, acyclic, and reachability checks must pass
 before graph `validation` can pass; every non-proof node must be reachable from
-the graph root. The proof node has `digest: null` to avoid self-reference,
-while the proof's top-level digest covers the complete graph. A graph node's
-type, declared identity, digest field, digest domain, and digest must match its
-bound record. A missing graph digest is `PROOF_INCOMPLETE`; a present malformed
-or mismatched graph digest is `DIGEST_INVALID`. Missing, structurally invalid,
-cyclic, reordered, or substituted graph evidence is `PROOF_INCOMPLETE`.
+the graph root. The proof-root node is the sole digest-value exception: it must
+retain its correct proof identity and binding, and must declare the required
+`digest_field`, but its `digest` must be exactly `null` to avoid self-reference;
+that null is not compared with the proof record's non-null `content_digest`.
+Every non-root graph node's type, declared identity, digest field, digest
+domain, and digest must match its bound record. A missing required graph digest
+field is `PROOF_INCOMPLETE`; for every non-root node, a present malformed or
+mismatched digest is `DIGEST_INVALID`. Missing, structurally invalid, cyclic,
+reordered, or substituted graph evidence is `PROOF_INCOMPLETE`.
 
 The deterministic validation cases for this extension are:
 
@@ -1373,11 +1378,15 @@ service-account operation, or credential mutation is authorized.
 
 ## 13. Failure, timeout, empty, conflict, and UNKNOWN handling
 
-Each schema owns its own typed `failures[].code` enum. Context schema `1.0`
-and work-packet schema `1.0` do not declare `SCHEMA_UNSUPPORTED`.
-Proof schema `1.1` declares it only for a proof consumer that rejects an
-unsupported proof version before accepting or interpreting the proof; no new
-context or work-packet schema version is introduced by this rule.
+Each schema owns its own typed `failures[].code` enum. Unchanged cross-record
+failure-code propagation is permitted only when every participating schema
+admits that code. Context schema `1.0` and work-packet schema `1.0` do not
+declare `SCHEMA_UNSUPPORTED`. Proof schema `1.1` declares it only for a proof
+consumer that rejects an unsupported proof version before accepting or
+interpreting the proof; when that rejection occurs, it is local to the
+proof-verification result and is not propagated into the `1.0` context or work
+packet. No new context or work-packet schema version is introduced by this
+rule.
 
 After proof-version support is established, the proof evidence failure matrix
 is deterministic and uses the first matching condition in this order:
@@ -1459,11 +1468,14 @@ is deterministic and uses the first matching condition in this order:
   attempt is missing, duplicated, mismatched, or lacks the exact query and
   outcome required to substantiate an empty or timeout result.
 
-Failure codes are stable interface values. They must be recorded unchanged in
-the envelope, packet, and proof; free-form messages may add detail but may not
-replace a code. Any failure affecting approval, packet approval, budget,
-digest, worktree, freshness, inventory, authority, retrieval evidence, or proof
-blocks `executing` and `validated`.
+Failure codes are stable interface values. When a failure is recorded across
+the envelope, packet, and proof, its unchanged code may be carried only where
+every participating schema admits it; free-form messages may add detail but may
+not replace an admitted code. A code that is not admitted by another
+participating schema remains local to the result whose schema admits it, as
+with proof-only `SCHEMA_UNSUPPORTED`. Any failure affecting approval, packet
+approval, budget, digest, worktree, freshness, inventory, authority, retrieval
+evidence, or proof blocks `executing` and `validated`.
 
 ## 14. Contest data and sample dataset
 
