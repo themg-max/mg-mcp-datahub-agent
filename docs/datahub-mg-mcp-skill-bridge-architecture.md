@@ -1091,11 +1091,12 @@ Normative approval validation resolves
 `proof.approval.approved_packet_record_id` to exactly one
 `packet_revision_lineage.revisions` entry. That entry must have `sequence: 2`,
 `revision_label: approved`, and `status: approved`. The verifier resolves that
-entry's `record_binding`, computes the RFC 8785 JCS SHA-256 digest of the
-resolved approved record's `approval_digest_payload`, and compares it with
-`proof.approval.approved_packet_digest`. This comparison must not use
-`packet_binding.record_id`, the terminal validated packet, or the terminal
-packet's approval payload. Separately, the verifier resolves
+entry's `record_binding`, reads the resolved approved revision's nested `approval_digest_payload`,
+computes the RFC 8785 JCS SHA-256 digest over that payload only, and compares it
+with `proof.approval.approved_packet_digest`.
+The verifier must not hash the complete approved revision record, the terminal
+packet's payload, or the record identified by `packet_binding.record_id`.
+Separately, the verifier resolves
 `packet_binding`, requires its `record_id` to equal
 `terminal_packet_record_id`, and validates the terminal revision through its
 `record_binding`, `terminal_packet_record_id`, and
@@ -1228,9 +1229,10 @@ The proof `context_budget.limits` must equal the packet
 `approved_packet_digest` and `approved_content_digest`, and
 `approval.approved_head_sha` must equal both the packet's validated worktree
 head and the proof's validated worktree head. `approval.approved_packet_digest`
-must equal the RFC 8785 JCS SHA-256 digest of the approved revision resolved
-from `proof.approval.approved_packet_record_id`, not the terminal packet's
-payload or `packet_binding.record_id`, and
+must equal the RFC 8785 JCS SHA-256 digest computed over the resolved approved revision's nested `approval_digest_payload`
+only, where the revision is resolved from `proof.approval.approved_packet_record_id`. The verifier must not
+hash the complete approved revision record, the terminal packet's payload, or
+the record identified by `packet_binding.record_id`. Separately,
 `approval.approved_content_digest` must equal the approved revision's
 `content_digest` captured at approval time. A missing or unresolved required
 binding or digest fails with `PROOF_INCOMPLETE`; a present malformed or
