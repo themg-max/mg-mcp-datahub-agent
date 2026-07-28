@@ -296,7 +296,7 @@ The orchestrator emits a packet before any worker action:
 
 ```yaml
 schema_name: governed_development_work_packet
-schema_version: "1.0"
+schema_version: "1.1"
 record_id: packet-<stable-id>
 request_id: <request-id>
 created_at: <ISO-8601>
@@ -621,6 +621,7 @@ packet_revision_lineage:
   schema_version: "1.0"
   record_type: governed_packet_revision_lineage
   record_id: packet-revision-lineage-<stable-id>
+  packet_schema_version: "1.1"
   request_id: <request-id>
   canonical_record_digest: sha256:<64-lowercase-hex>
   lineage_profile: datahub_bridge_packet_lifecycle_v1
@@ -637,6 +638,7 @@ packet_revision_lineage:
         resolution_validation: pass|fail
       content_digest: sha256:<64-lowercase-hex>
       status: proposed
+      execution_status: not_started
       supersedes: null
       authorization_binding: null
     - sequence: 1
@@ -649,6 +651,7 @@ packet_revision_lineage:
         resolution_validation: pass|fail
       content_digest: sha256:<64-lowercase-hex>
       status: proposed
+      execution_status: not_started
       supersedes: <packet-proposed-initial-id>
       authorization_binding: null
     - sequence: 2
@@ -661,6 +664,7 @@ packet_revision_lineage:
         resolution_validation: pass|fail
       content_digest: sha256:<64-lowercase-hex>
       status: approved
+      execution_status: approved
       supersedes: <packet-proposed-refined-id>
       authorization_binding: self
     - sequence: 3
@@ -673,6 +677,7 @@ packet_revision_lineage:
         resolution_validation: pass|fail
       content_digest: sha256:<64-lowercase-hex>
       status: executing
+      execution_status: executing
       supersedes: <packet-approved-id>
       authorization_binding:
         approved_packet_record_id: <packet-approved-id>
@@ -688,6 +693,7 @@ packet_revision_lineage:
         resolution_validation: pass|fail
       content_digest: sha256:<64-lowercase-hex>
       status: validated
+      execution_status: validated
       supersedes: <packet-executing-id>
       authorization_binding:
         approved_packet_record_id: <packet-approved-id>
@@ -697,58 +703,70 @@ packet_revision_lineage:
     - predecessor_record_id: <packet-proposed-initial-id>
       predecessor_content_digest: sha256:<64-lowercase-hex>
       predecessor_status: proposed
+      predecessor_execution_status: not_started
       successor_record_id: <packet-proposed-refined-id>
       successor_content_digest: sha256:<64-lowercase-hex>
       successor_status: proposed
+      successor_execution_status: not_started
       successor_supersedes: <packet-proposed-initial-id>
       expected_transition: refine
       predecessor_binding_validation: pass|fail
       successor_binding_validation: pass|fail
       digest_validation: pass|fail
       status_transition_validation: pass|fail
+      execution_status_validation: pass|fail
       supersedes_validation: pass|fail
       validation: pass|fail
     - predecessor_record_id: <packet-proposed-refined-id>
       predecessor_content_digest: sha256:<64-lowercase-hex>
       predecessor_status: proposed
+      predecessor_execution_status: not_started
       successor_record_id: <packet-approved-id>
       successor_content_digest: sha256:<64-lowercase-hex>
       successor_status: approved
+      successor_execution_status: approved
       successor_supersedes: <packet-proposed-refined-id>
       expected_transition: approve
       predecessor_binding_validation: pass|fail
       successor_binding_validation: pass|fail
       digest_validation: pass|fail
       status_transition_validation: pass|fail
+      execution_status_validation: pass|fail
       supersedes_validation: pass|fail
       validation: pass|fail
     - predecessor_record_id: <packet-approved-id>
       predecessor_content_digest: sha256:<64-lowercase-hex>
       predecessor_status: approved
+      predecessor_execution_status: approved
       successor_record_id: <packet-executing-id>
       successor_content_digest: sha256:<64-lowercase-hex>
       successor_status: executing
+      successor_execution_status: executing
       successor_supersedes: <packet-approved-id>
       expected_transition: execute
       predecessor_binding_validation: pass|fail
       successor_binding_validation: pass|fail
       digest_validation: pass|fail
       status_transition_validation: pass|fail
+      execution_status_validation: pass|fail
       supersedes_validation: pass|fail
       authorization_carry_forward_validation: pass|fail
       validation: pass|fail
     - predecessor_record_id: <packet-executing-id>
       predecessor_content_digest: sha256:<64-lowercase-hex>
       predecessor_status: executing
+      predecessor_execution_status: executing
       successor_record_id: <packet-validated-id>
       successor_content_digest: sha256:<64-lowercase-hex>
       successor_status: validated
+      successor_execution_status: validated
       successor_supersedes: <packet-executing-id>
       expected_transition: validate
       predecessor_binding_validation: pass|fail
       successor_binding_validation: pass|fail
       digest_validation: pass|fail
       status_transition_validation: pass|fail
+      execution_status_validation: pass|fail
       supersedes_validation: pass|fail
       authorization_carry_forward_validation: pass|fail
       validation: pass|fail
@@ -985,6 +1003,23 @@ review:
 
 ### Proof schema 1.1 extension and compatibility
 
+#### Work-packet schema compatibility
+
+`governed_development_work_packet` `1.0` remains defined and unchanged. Under
+packet schema `1.0`, creating any successor revision invalidates the prior
+approval: the successor must obtain its own affirmative approval and all
+approval gates before its `execution_status` may become `approved`,
+`executing`, or `validated`. A `1.0` packet must not declare or rely on an
+`authorization_binding` or authorization carry-forward edge result.
+
+`governed_development_work_packet` `1.1` is the governed-development packet
+schema used by the packet-lineage example in this section. It retains every
+`1.0` field and approval-digest rule, and additionally permits an immutable
+approved revision to authorize conforming successor revisions through the
+explicit `authorization_binding` and the applicable validated lineage edge.
+Only packet schema `1.1` assigns this carry-forward meaning. The context schema
+remains `1.0`, and the proof schema remains `1.1`.
+
 `governed_development_proof` `1.1` is a minor, field-definition-compatible
 extension, not a major schema version. It preserves the meaning and
 serialization rules of all existing `1.0` fields, but it is not
@@ -1030,15 +1065,46 @@ failure; a malformed or mismatched artifact digest or byte length is a digest
 failure.
 
 `packet_revision_lineage` is reserved for packet revisions only.
-`lineage_profile` declares the exact revision lifecycle. The first defined
-profile is `datahub_bridge_packet_lifecycle_v1`; it requires exactly the five
-revisions `proposed_initial`, `proposed_refined`, `approved`, `executing`, and
-`validated` with the four transitions `refine`, `approve`, `execute`, and
-`validate`. Future proof profiles may use a different sequence; this schema
-does not require every proof to use that exact five-revision shape.
+`lineage_profile` deterministically selects one defined lifecycle from the
+actual ordered revisions; a verifier must reject a sequence that matches none
+or more than one profile with `PROOF_INCOMPLETE`. The successful profile,
+`datahub_bridge_packet_lifecycle_v1`, requires exactly the five revisions
+`proposed_initial`, `proposed_refined`, `approved`, `executing`, and
+`validated`, with the four transitions `refine`, `approve`, `execute`, and
+`validate`; it is required only for a successful validated proof.
+
+Fail-closed terminal profiles are the truthful valid prefixes of that canonical
+lifecycle: `datahub_bridge_packet_terminal_proposed_initial_v1`,
+`datahub_bridge_packet_terminal_proposed_refined_v1`,
+`datahub_bridge_packet_terminal_approved_v1`, and
+`datahub_bridge_packet_terminal_executing_v1`. They contain respectively the
+first one, two, three, or four canonical revisions and only their corresponding
+prefix edges. Their final revision is the actual terminal packet revision:
+`terminal_packet_record_id` and `packet_binding.record_id` must both equal it.
+No terminal profile may add an `executing` or `validated` revision after a
+blocked, failed, rejected, timed-out, or unknown result.
+
+For every profile, each nonterminal revision must use its canonical
+wrapper-status/execution-status pair (`proposed/not_started`,
+`approved/approved`, or `executing/executing`). The successful terminal pair is
+`validated/validated`. A terminal-prefix final revision may use its canonical
+pair only when its result is still pending, or one of
+`proposed/blocked`, `proposed/failed`, `approved/blocked`, `approved/failed`,
+`executing/blocked`, `executing/failed`, `blocked/blocked`, or
+`blocked/failed`; rejected, timed-out, and unknown outcomes require a
+fail-closed terminal pair plus attributable failure, retrieval, or authority
+evidence. This table defines all allowed wrapper-status and execution-status
+combinations for every transition and terminal revision.
+
+`packet_schema_version` declares the schema version of every bound packet
+revision; a lineage that uses authorization carry-forward must declare `1.1`
+and every resolved packet record must equal that declared version. A `1.0`
+lineage may not contain authorization carry-forward evidence and every
+successor must requalify through its own approval.
 
 `root_packet_record_id` must identify the initial proposed revision and
-`terminal_packet_record_id` must identify the validated revision;
+`terminal_packet_record_id` must identify the selected profile's actual final
+revision;
 `packet_binding.record_id` must equal `terminal_packet_record_id`. Every
 revision has a unique `record_id`, its exact `content_digest`, its `status`,
 and `supersedes`; the initial revision has `supersedes: null`, and every later
@@ -1051,10 +1117,13 @@ and successor record IDs, both content digests, both statuses, the successor's
 `supersedes`, and the expected transition through
 `predecessor_binding_validation`, `successor_binding_validation`,
 `digest_validation`, `status_transition_validation`,
-`supersedes_validation`, and, only for the post-approval `approve`-to-`execute`
-and `execute`-to-`validate` edges, `authorization_carry_forward_validation`;
-all required edge results must pass before `aggregate_validation` can pass. The
-revision sequence
+`execution_status_validation`, `supersedes_validation`, and, only where the
+bound successor packet is schema `1.1` and the selected post-approval
+transition requires it, `authorization_carry_forward_validation`; all required
+edge results must pass before `aggregate_validation` can pass. Both edge
+execution-status values must equal the `execution_status` values in their
+resolved bound packet records, just as both wrapper-status values must equal
+their records' `status` values. The revision sequence
 is independent of proof dependencies and is never inferred from node type or
 status alone.
 
@@ -1076,14 +1145,16 @@ successor sequence. Any noncanonical ordering is `PROOF_INCOMPLETE`.
 
 Approval binds the immutable `approved` revision (sequence 2). Its approval
 payload's `packet_record_id` must equal that approved revision's `record_id`,
-not the validated revision. The `executing` and `validated` revisions supersede
-the approved revision without mutating it; they carry an
+not the validated revision. For packet schema `1.1`, the `executing` and
+`validated` revisions supersede the approved revision without mutating it; they
+carry an
 `authorization_binding` that identifies the approved packet record ID, its
 `approved_content_digest`, and its `approved_packet_digest`. The `approve`-to-`execute` and
 `execute`-to-`validate` edges verify this authorization carry-forward through
 `authorization_carry_forward_validation`. Only mutation of the approved revision
-itself or its approval payload invalidates approval; conforming successor
-creation does not. `proof.approval.approved_packet_record_id`,
+itself or its approval payload invalidates approval; conforming `1.1` successor
+creation does not. Packet schema `1.0` instead invalidates approval on every
+successor creation and requires reapproval. `proof.approval.approved_packet_record_id`,
 `approved_packet_digest`, `approved_content_digest`, and
 `terminal_packet_record_id` capture this binding.
 `lineage_authorization_validation` is `pass` only when the terminal revision's
@@ -1123,7 +1194,10 @@ binding mismatch is
 
 `aggregate_validation` is the sole summary result for
 `packet_revision_lineage`; no separate overall `validation` field is allowed.
-It is `pass` only when all revision bindings and all edge validations pass.
+It is `pass` only when all revision bindings, profile-selection and
+terminal-binding checks, and all applicable identity, digest, wrapper-status,
+execution-status, transition, supersession, and authorization edge validations
+pass.
 Contradictory summary results are structurally invalid and fail with
 `PROOF_INCOMPLETE`.
 
@@ -1187,12 +1261,17 @@ The deterministic validation cases for this extension are:
   and payload digest binds to its canonical record and proof digest.
 2. Removing, duplicating, or substituting an artifact record or graph node,
   or duplicating a graph `node_identity`, returns `PROOF_INCOMPLETE`.
-3. A complete five-revision sequence passes only when every embedded or
+3. A successful validated proof's complete five-revision sequence passes only
+  when every embedded or
   external-exact binding resolves, every edge matches both endpoint records,
-  digests, statuses, `supersedes`, and transition, and `aggregate_validation`
+  digests, wrapper statuses, execution statuses, `supersedes`, and transition,
+  and `aggregate_validation`
   passes.
-4. Removing, skipping, duplicating, reordering, cycling, or substituting a
-  packet revision returns `PROOF_INCOMPLETE`.
+4. A blocked, failed, rejected, timed-out, or unknown result passes only with
+  its deterministic truthful-prefix terminal profile, actual last revision
+  bound by `terminal_packet_record_id`, and no fabricated later revision;
+  removing, skipping, duplicating, reordering, cycling, or substituting a
+  revision returns `PROOF_INCOMPLETE`.
 5. Changing one payload byte, byte length, media-bound canonical field, JCS
   serialization, digest case, or digest value returns `DIGEST_INVALID`.
 6. A missing required approval binding or `approved_packet_digest` returns
