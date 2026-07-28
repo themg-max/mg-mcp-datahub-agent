@@ -40,9 +40,10 @@ implementation, deployment, DataHub-write, MG-MCP-write, or merge authority.
 2. Packet records are immutable evidence records. Before approval, a proposed
    immutable packet record may be superseded by another proposed immutable packet
    record carrying refined retrieved context. This is record supersession, not an
-   execution lifecycle transition. The new record has a new `record_id`, sets
-   `supersedes` to the immediately prior packet record, and recomputes the RFC
-   8785 JCS SHA-256 `content_digest` under the controlling digest rule.
+   execution lifecycle transition. Every successor packet record, including each
+   lifecycle revision, has a new `record_id`, sets `supersedes` to the immediately
+   preceding packet record, and recomputes the RFC 8785 JCS SHA-256
+   `content_digest` under the controlling digest rule.
 3. Approved, executing, and validated packet records are newly issued immutable
    revisions. Approval is tied to the exact record ID, content digest,
    `approval_digest_payload` digest, head SHA, reviewer identity, disposition,
@@ -53,13 +54,16 @@ implementation, deployment, DataHub-write, MG-MCP-write, or merge authority.
    `approval_digest_payload`; `approved_content_digest` is the exact current
    packet `content_digest` captured at approval time. No alternate digest target
    or stable approval across later packet revisions is introduced here.
-5. The final proof binds to the exact validated packet revision by record ID and
-   content digest. Earlier records remain attributable through their
-   `supersedes` relationships; they do not substitute for the final packet
-   binding.
-6. Missing, broken, or digest-inconsistent packet evidence is `PROOF_INCOMPLETE`
-   or `DIGEST_INVALID`. Approval or proof bound to any other packet revision is
-   `PACKET_APPROVAL_MISMATCH`.
+5. The packet lineage is exact: initial proposed, refined proposed, approved,
+   executing, and validated records each have a new `record_id` and the
+   immediately preceding record's ID in `supersedes`. The final proof
+   `packet_binding` binds only to the validated record. Earlier records remain
+   attributable through `supersedes` and `related_artifacts`; they do not
+   substitute for the final packet binding.
+6. Missing, skipped, duplicated, cyclic, or incorrect predecessor links are
+   `PROOF_INCOMPLETE`. Approval or proof bound to any other packet revision is
+   `PACKET_APPROVAL_MISMATCH`; packet content or artifact digest inconsistency is
+   `DIGEST_INVALID`.
 
 ## Explicit packet transition graph
 
@@ -67,9 +71,9 @@ Only these forward transitions are permitted:
 
 | From | To | Required gate |
 |---|---|---|
-| `proposed` / `not_started` | `approved` / `approved` | All retrieval, context, screening, inventory, worktree, scope, digest, and expiry gates pass; issue the exact approved packet revision and obtain fresh human approval for it. |
-| `approved` / `approved` | `executing` / `executing` | Issue a new executing revision, revalidate every approval-bearing field, and obtain fresh human approval for the exact executing revision before rendering. |
-| `executing` / `executing` | `validated` / `validated` | Complete side-effect-free rendering and validation, issue a new validated revision, and obtain fresh human approval for the exact validated revision before final emission. |
+| `proposed` / `not_started` | `approved` / `approved` | All retrieval, context, screening, inventory, worktree, scope, digest, and expiry gates pass; issue an approved revision whose `supersedes` names the refined proposed record, then obtain fresh human approval for it. |
+| `approved` / `approved` | `executing` / `executing` | Issue an executing revision whose `supersedes` names the approved record, revalidate every approval-bearing field, and obtain fresh human approval for the exact executing revision before rendering. |
+| `executing` / `executing` | `validated` / `validated` | Complete side-effect-free rendering and validation, issue a validated revision whose `supersedes` names the executing record, and obtain fresh human approval for the exact validated revision before final emission. |
 | Any nonterminal state | `blocked` / `blocked` or `blocked` / `failed` | Record the exact failure and stop. |
 
 All other edges are forbidden. In particular:
@@ -125,31 +129,45 @@ does not match the exact current revision is `PACKET_APPROVAL_MISMATCH`.
 16. Screen retrieved text as data only. Missing or pending evidence is
     `SCREENING_REQUIRED`; rejected sanitization or injection screening is
     `SCREENING_FAILED`.
-17. Build immutable canonical context and issue a new proposed packet revision
-    that supersedes the initial packet record and carries the exact context
-    record ID and digest, observed connection, retrieval attempts, observed
-    budgets, freshness, screening, provenance, inventory, and worktree bindings.
+17. Build immutable canonical context and issue a new refined proposed packet
+    revision whose `supersedes` names the initial proposed packet record. Carry
+    the exact context record ID and digest, observed connection, retrieval
+    attempts, observed budgets, freshness, screening, provenance, inventory, and
+    worktree bindings.
 18. Revalidate source, manifest, skill, inventory, connection, attempts, budgets,
     freshness, screening, context, worktree, scope, digest, and trusted expiry.
-19. Issue the `approved` packet revision and obtain fresh affirmative approval
-    tied to this exact packet record, content digest, approval payload digest,
-    exact head, reviewer, disposition, and expiry.
-20. Issue the `executing` packet revision, repeat the full gate, and obtain fresh
-    affirmative approval for the exact executing packet before rendering.
+19. Issue the `approved` packet revision with `supersedes` set to the refined
+    proposed record, and obtain fresh affirmative approval tied to this exact
+    packet record, content digest, approval payload digest, exact head, reviewer,
+    disposition, and expiry.
+20. Issue the `executing` packet revision with `supersedes` set to the approved
+    record, repeat the full gate, and obtain fresh affirmative approval for the
+    exact executing packet before rendering.
 21. Render only through a pure in-memory function that returns strings or bytes
     and has no filesystem, subprocess, Git, network, DataHub-write, or
     MG-MCP-write capability.
-22. Immediately after rendering, run fresh Git identity/status, scope, inventory,
-    expiry, tool/command, and digest checks. Any changed path outside the packet
-    allowlist is `SCOPE_VIOLATION`; other worktree drift is `WORKTREE_INVALID`.
-23. Issue the `validated` packet revision with exact validation evidence, repeat
-    the full gate, and obtain fresh affirmative approval for the exact validated
-    packet.
-24. Build proof using the pairwise bindings below. Emit only when the final proof
+22. Issue one immutable generated-artifact manifest record for the exact SQL
+    bytes and one for the exact YAML bytes. Each record uses the existing shared
+    schema spine and records a stable artifact `record_id`, media type, byte
+    length, and SHA-256 `content_digest`. Reference both records from packet and
+    proof `related_artifacts`; carry each record and its validation outcome
+    through existing proof `validation` evidence. Missing artifact evidence is
+    `PROOF_INCOMPLETE`.
+23. Immediately before emission, recompute SHA-256 for the exact SQL and YAML
+    bytes being returned and require equality with their recorded artifact
+    digests and byte lengths. A mismatch is `DIGEST_INVALID`; do not emit.
+24. Immediately after rendering and artifact validation, run fresh Git
+    identity/status, scope, inventory, expiry, tool/command, packet-lineage,
+    artifact, and digest checks. Any changed path outside the packet allowlist is
+    `SCOPE_VIOLATION`; other worktree drift is `WORKTREE_INVALID`.
+25. Issue the `validated` packet revision with `supersedes` set to the executing
+    record and exact artifact and validation evidence, repeat the full gate, and
+    obtain fresh affirmative approval for the exact validated packet.
+26. Build proof using the pairwise bindings below. Emit only when the final proof
     and validated packet revision agree exactly and all approval, expiry, scope,
-    inventory, tool, command, and no-write checks pass.
-25. On any failure, discard the in-memory proposal, preserve attributable attempt
-    and failure evidence, return the exact blocked code, and stop.
+    inventory, tool, command, artifact, and no-write checks pass.
+27. On any failure, discard the in-memory proposal, preserve attributable attempt,
+    artifact, and failure evidence, return the exact blocked code, and stop.
 
 ## Retrieval budgets and freshness
 
@@ -218,13 +236,17 @@ The final proof must equal the exact validated packet revision for:
 - source mode, context record ID/digest, manifest digest, repository and worktree;
 - literal writable paths, readable paths, tools, denied tools, and commands;
 - packet status, execution status, expiry, validation, and failure fields;
+- packet `related_artifacts`, including the immutable SQL and YAML artifact
+  manifest record IDs;
 - every approval field, including reviewer, disposition, approved head,
   `approved_packet_digest`, and `approved_content_digest`.
 
 The proof records the exact validated packet through `packet_binding`; related
 records remain attributable through supported `supersedes` and
-`related_artifacts` evidence. Earlier approvals do not authorize the final
-revision.
+`related_artifacts` evidence. The SQL and YAML artifact records must carry the
+same stable IDs, media types, byte lengths, and content digests into the proof's
+`related_artifacts` and `validation` evidence. Earlier approvals do not
+authorize the final revision.
 
 ### Context to packet and proof
 
@@ -249,7 +271,11 @@ Use the existing proof fields `context_evidence`, `pre_retrieval_evidence`,
 `scope_check`, and `review`, together with `supersedes`, `related_artifacts`, and
 `packet_binding`. These fields carry attributable context, retrieval, source,
 inventory, execution, validation, scope, and reviewer evidence without adding
-dedicated packet-revision-chain or emitted-proposal fields.
+dedicated packet-revision-chain or emitted-proposal fields. Artifact validation
+evidence references each immutable SQL/YAML artifact record and records the
+recomputed exact-byte digest and byte-length comparison outcome. Missing
+artifact evidence is `PROOF_INCOMPLETE`; a digest or length mismatch is
+`DIGEST_INVALID`.
 
 Any mismatch within an applicable pair is routed to its controlling exact code:
 `CONNECTION_MISMATCH`, `RETRIEVAL_EVIDENCE_INVALID`, `TOOL_INVENTORY_INVALID`,
@@ -287,7 +313,9 @@ A success result includes exact request and mode, manifest and observed fixture
 bindings, immutable skill, retrieval attempts, declared and observed budgets,
 canonical context/provenance/freshness, the exact final validated
 `packet_binding`, fresh final approval, worktree and transition evidence,
-authorized tool/command evidence, and the supported proof fields
+authorized tool/command evidence, immutable SQL/YAML artifact manifest records
+with exact media types, byte lengths, and SHA-256 content digests, and the
+supported proof fields
 `context_evidence`, `pre_retrieval_evidence`, `source_attribution`,
 `tool_inventory`, `execution_evidence`, `validation`, `scope_check`, and
 `review`, plus the non-self-referential RFC 8785 JCS SHA-256 proof digest.
@@ -323,12 +351,15 @@ evidence not being `RETRIEVAL_EVIDENCE_INVALID`; missing or mismatched attempt
 evidence being `RETRIEVAL_EVIDENCE_INVALID`; source freshness; screening; clean
 worktree and scope precedence; side-effect-free rendering; expiry before every
 approval and transition; proposed-record refinement via `supersedes`; packet
-revision digest continuity; fresh approval
+revision digest continuity with exact predecessor links; immutable SQL/YAML
+artifact records with media types, byte lengths, and exact SHA-256 binding;
+missing artifact evidence; artifact digest or length mismatch; fresh approval
 for `approved`, `executing`, and `validated`; rejection of every forbidden or
 regressive transition edge; exact final packet-to-proof approval binding;
 context-to-packet/proof pairwise equality; manifest-to-packet/proof pairwise
-equality; rejection of unsupported literal three-way approval equality; and
-incomplete proof.
+equality; exact packet predecessor continuity including missing, skipped,
+duplicated, cyclic, and incorrect links; rejection of unsupported literal
+three-way approval equality; and incomplete proof.
 
 ## Planning PR validation
 
