@@ -1222,8 +1222,9 @@ Contradictory summary results are structurally invalid and fail with
 `PROOF_INCOMPLETE`.
 
 `proof_evidence_graph` is the separate dependency carrier for the bound
-validated packet, context, packet revision lineage, approval payload,
-artifact-evidence records, and proof record. Its `node_identity` values must
+terminal packet, context, packet revision lineage, artifact-evidence records,
+proof record, and, only when the selected lineage profile reaches approval,
+approval payload. Its `node_identity` values must
 be unique. Every graph node declares `record_identity.field` and
 `record_identity.value`; the field is `record_id` for records that have that
 field and `packet_record_id` for `governed_packet_approval_payload`. The
@@ -1235,14 +1236,18 @@ assume every bound object has `record_id`. Repeated artifact `record_type`
 values are valid when their node identities and resolved record identities are
 distinct.
 
-The approval node does not carry `approved_packet_digest` as an intrinsic
-field; the approval payload itself is the RFC 8785 JCS digest target and
-`proof.approval.approved_packet_digest` is the expected digest source. The
+When the selected lineage profile reaches approval, the required approval node
+does not carry `approved_packet_digest` as an intrinsic field; the approval
+payload itself is the RFC 8785 JCS digest target and
+`proof.approval.approved_packet_digest` is the expected digest source. That
 graph node therefore declares `digest_field: null` with
 `digest_target: payload_is_digest_target` and
 `expected_digest_source: proof.approval.approved_packet_digest`;
 `digest_binding_validation` records whether the externally declared digest
-matches the RFC 8785 JCS hash of the resolved payload record.
+matches the RFC 8785 JCS hash of the resolved payload record. For
+`terminal_proposed_initial` and `terminal_proposed_refined`, the graph must
+omit both the approval-payload node and the `binds_approval_payload` edge;
+their absence is not `PROOF_INCOMPLETE`.
 
 `allowed_relationships` is a normative enum with values sorted
 lexicographically: `binds_approval_payload`, `binds_context`, `binds_packet`,
@@ -1253,7 +1258,9 @@ The graph is a containment graph, not packet revision history. It has exactly
 one proof node with both `workflow_terminal: true` and `graph_root: true`, and
 that node is the only null-digest node. The graph-root proof node has one
 directed edge to each bound non-proof evidence node: packet, context, packet
-revision lineage, approval payload, and every artifact record. Each edge is
+revision lineage, and every artifact record. It also has exactly one directed
+edge to the approval-payload node when, and only when, the selected lineage
+profile reaches approval. Each edge is
 unique by `(from_node_identity, to_node_identity, relationship)`, carries
 `binding_validation`, and its relationship must be one of `binds_packet`,
 `binds_context`, `binds_packet_revision_lineage`,
@@ -1330,10 +1337,13 @@ equal the retrieved context record.
 The proof `context_budget.limits` must equal the packet
 `pre_retrieval_manifest.context_budget` field-for-field. The shared proof
 `approval` fields must equal the packet's `approval` fields, including
-`approved_packet_digest` and `approved_content_digest`, and
-`approval.approved_head_sha` must equal both the packet's validated worktree
-head and the proof's validated worktree head. `approval.approved_packet_digest`
-must equal the RFC 8785 JCS SHA-256 digest computed over the resolved approved revision's nested `approval_digest_payload`
+`approved_packet_digest` and `approved_content_digest`. When the selected
+lineage profile reaches approval, `approval.approved_head_sha` must equal both
+`packet.repository.worktree.head_sha` and `proof.worktree.head_sha`. For
+`terminal_proposed_initial` and `terminal_proposed_refined`,
+`approval.approved_head_sha` remains null and this comparison is not performed.
+For a profile that reaches approval, `approval.approved_packet_digest` must
+equal the RFC 8785 JCS SHA-256 digest computed over the resolved approved revision's nested `approval_digest_payload`
 only, where the revision is resolved from `proof.approval.approved_packet_record_id`. The verifier must not
 hash the complete approved revision record, the terminal packet's payload, or
 the record identified by `packet_binding.record_id`. Separately,
