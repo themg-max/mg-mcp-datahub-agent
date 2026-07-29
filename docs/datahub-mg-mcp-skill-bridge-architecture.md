@@ -1187,14 +1187,25 @@ successor creation and requires reapproval. `proof.approval.approved_packet_reco
 `approved_packet_digest`, `approved_content_digest`, and
 `terminal_packet_record_id` capture this binding.
 `lineage_authorization_validation` is `pass` only when the terminal revision's
-`authorization_binding` digests match the proof's approval fields.
+authorization source matches the proof's approval fields. For an `executing`
+or `validated` successor, the terminal revision's structured
+`authorization_binding` digests must match those fields. For the approved
+revision itself, the wrapper sentinel `authorization_binding: self` resolves
+to that revision's own `record_id`, verified `approval_digest_payload` digest,
+and `content_digest`; the resolved packet record's null binding values are not
+compared with the proof's non-null approval fields. The `self` form is valid
+only when the approved revision is the terminal revision.
 
 Normative approval-revision validation is conditional on the selected lineage
 profile reaching approval. For the successful profile and the
 `terminal_approved` and `terminal_executing` profiles, it resolves
 `proof.approval.approved_packet_record_id` to exactly one
 `packet_revision_lineage.revisions` entry. That entry must have `sequence: 2`,
-`revision_label: approved`, and `status: approved`. The verifier resolves that
+`revision_label: approved`, and, when it is nonterminal, `status: approved` and
+`execution_status: approved`. When that entry is the final revision of the
+`terminal_approved` profile, the verifier instead validates its `status` and
+`execution_status` against the terminal-profile status table above, including
+the permitted fail-closed `blocked` combinations. The verifier resolves that
 entry's `record_binding`, reads the resolved approved revision's nested
 `approval_digest_payload`, computes the RFC 8785 JCS SHA-256 digest over that
 payload only, and compares it with
