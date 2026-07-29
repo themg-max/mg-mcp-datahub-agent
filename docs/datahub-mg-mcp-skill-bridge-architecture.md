@@ -312,6 +312,10 @@ failures:
     source: DataHub|MG MCP|repository|orchestrator|proof
 content_digest: sha256:<digest>
 supersedes: <packet-id-or-null>
+authorization_binding:
+  approved_packet_record_id: <packet-approved-id-or-null>
+  approved_packet_digest: sha256:<64-lowercase-hex-or-null>
+  approved_content_digest: sha256:<64-lowercase-hex-or-null>
 related_artifacts: []
 objective: safe dbt schema migration
 source_mode: OFFLINE_FIXTURE|ISOLATED_DATAHUB_READ_ONLY
@@ -1017,6 +1021,16 @@ schema used by the packet-lineage example in this section. It retains every
 `1.0` field and approval-digest rule, and additionally permits an immutable
 approved revision to authorize conforming successor revisions through the
 explicit `authorization_binding` and the applicable validated lineage edge.
+The binding shown in the `1.1` packet declaration is part of the resolved
+packet record and therefore is covered by that packet's `content_digest`; it
+is not merely metadata on the lineage revision wrapper. All three binding
+values are null before an approved revision is carried forward. An `executing`
+or `validated` successor must populate all three values from its immutable
+approved revision. A partially populated binding is invalid, and the lineage
+wrapper's `authorization_binding` must exactly reproduce the resolved packet's
+binding. The approved revision's wrapper may use the sentinel `self` only to
+identify the authorization source; `self` is not serialized into the resolved
+packet's binding.
 Only packet schema `1.1` assigns this carry-forward meaning. The context schema
 remains `1.0`, and the proof schema remains `1.1`.
 
@@ -1160,13 +1174,19 @@ successor creation and requires reapproval. `proof.approval.approved_packet_reco
 `lineage_authorization_validation` is `pass` only when the terminal revision's
 `authorization_binding` digests match the proof's approval fields.
 
-Normative approval validation resolves
+Normative approval-revision validation is conditional on the selected lineage
+profile reaching approval. For the successful profile and the
+`terminal_approved` and `terminal_executing` profiles, it resolves
 `proof.approval.approved_packet_record_id` to exactly one
 `packet_revision_lineage.revisions` entry. That entry must have `sequence: 2`,
 `revision_label: approved`, and `status: approved`. The verifier resolves that
-entry's `record_binding`, reads the resolved approved revision's nested `approval_digest_payload`,
-computes the RFC 8785 JCS SHA-256 digest over that payload only, and compares it
-with `proof.approval.approved_packet_digest`.
+entry's `record_binding`, reads the resolved approved revision's nested
+`approval_digest_payload`, computes the RFC 8785 JCS SHA-256 digest over that
+payload only, and compares it with
+`proof.approval.approved_packet_digest`. For `terminal_proposed_initial` and
+`terminal_proposed_refined`, the verifier must not resolve or require an
+approved revision or approval digests; those approval fields remain null and
+their absence is not `PROOF_INCOMPLETE`.
 The verifier must not hash the complete approved revision record, the terminal
 packet's payload, or the record identified by `packet_binding.record_id`.
 Separately, the verifier resolves
@@ -1361,8 +1381,11 @@ packet-authorized sets.
 transition timestamp; and every non-null `approved_at`, `executing_at`, and
 `validated_at` timestamp must be at or before `expires_at`. Missing, malformed,
 or late evidence fails proof with `PACKET_EXPIRED`.
-`packet_revision_lineage` must contain the five revisions and verify every
-successive edge against the packet revision transition rules. Every revision
+`packet_revision_lineage` must contain exactly five revisions only when its
+selected profile is `datahub_bridge_packet_lifecycle_v1`. A terminal profile
+must instead contain exactly its defined one-, two-, three-, or four-revision
+prefix and all, but only, the successive edges in that prefix; the verifier
+must not require later revisions or edges. Every present revision
 `record_id` must be unique, and no revision may be omitted, repeated, or
 reused as a different status. `proof_evidence_graph` must contain unique node
 identities; its graph-root proof node must be the only null-digest node.
