@@ -614,10 +614,12 @@ artifact_evidence:
     artifact_path: <literal-repository-relative-path>
     artifact_role: generated|modified|validation_output
     media_type: <lowercase-IANA-type-subtype-without-parameters>
-    presence: present
+    presence: present|not_produced
+    nonproduction_reason: <approval_rejected|timeout|blocked|failed|unknown|null>
+    lifecycle_stage: <proposed_initial|proposed_refined|approved|executing|validated>
     immutable: true
-    byte_length: <non-negative-integer>
-    payload_digest: sha256:<64-lowercase-hex>
+    byte_length: <non-negative-integer-or-null>
+    payload_digest: <sha256:64-lowercase-hex-or-null>
     canonical_record_digest: sha256:<64-lowercase-hex>
     validation: pass|fail
 packet_revision_lineage:
@@ -1056,9 +1058,22 @@ is part of the canonical record digest. Repeated artifact record types and
 media types are allowed when record IDs and required-artifact/path bindings are
 different. Each `packet_required_artifact` must equal its packet entry, each
 `artifact_path` must be the same literal approved repository path, and
-`presence` must be `present`. The artifact is read as bytes at validation time;
-the record captures that exact `byte_length` and `payload_digest`, then binds
-both values into `canonical_record_digest`.
+`presence` must be `present` or `not_produced`. A `present` artifact is read as
+bytes at validation time; its record captures the exact non-null `byte_length`
+and `payload_digest`, sets `nonproduction_reason: null`, and binds those values
+and its `lifecycle_stage` into `canonical_record_digest`.
+
+`not_produced` is explicit negative evidence, not an artifact claim. It is
+valid only for a terminal-prefix proof whose terminal revision is not
+`validated` and the artifact bytes were never created. Its `byte_length` and
+`payload_digest` must both be null, its `lifecycle_stage` must equal the
+terminal revision label, and `nonproduction_reason` must be the attributable
+terminal cause: `approval_rejected`, `timeout`, `blocked`, `failed`, or
+`unknown`. A successful validated proof requires `presence: present` for every
+required artifact. A terminal-prefix proof may use `present` for artifacts
+created before the failure and `not_produced` for the remainder; it must never
+fabricate a file or payload digest. Any other presence/field combination is
+structurally invalid and fails with `PROOF_INCOMPLETE`.
 
 `artifact_evidence` is required for every `1.1` proof. It may be `[]` only
 when `packet.required_artifacts` is `[]`; an artifact claim without its
@@ -1312,9 +1327,14 @@ The deterministic validation cases for this extension are:
 9. Presenting a `1.1` proof to a consumer that supports only `1.0` returns
   `SCHEMA_UNSUPPORTED`; no silent field dropping or downgrade is permitted.
 10. Empty `artifact_evidence` passes only with an empty
-  `packet.required_artifacts`; a claimed artifact without evidence, a
-  noncanonical collection order, an unresolved declared graph identity, or a
-  graph node unreachable from the root returns `PROOF_INCOMPLETE`.
+  `packet.required_artifacts`. A terminal-prefix proof may represent each
+  uncreated required artifact with a canonical `not_produced` record, null
+  payload fields, and its attributable terminal cause; a validated proof or a
+  record for bytes that exist may not use `not_produced`. A required artifact
+  without either truthful form of evidence, an invalid presence/field
+  combination, a noncanonical collection order, an unresolved declared graph
+  identity, or a graph node unreachable from the root returns
+  `PROOF_INCOMPLETE`.
 
 Proof acceptance requires attributable source evidence, exact path scope,
 successful validation, visible tool inventory, and a fail-closed result for at
