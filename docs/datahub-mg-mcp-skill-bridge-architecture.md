@@ -1095,19 +1095,26 @@ Every `present` `generated` or `modified` artifact requires verified
 required only for `present` `generated` or `modified` evidence; no object is
 serialized for `not_produced` or `validation_output` evidence. Every object
 member is non-null except `base_payload_digest` for generated evidence. The
-object binds the proof base head, terminal head, literal artifact path, prior
-artifact state, result payload digest, deterministic diff digest, and validation
-result.
-`delta_provenance.artifact_path` and `result_payload_digest` must equal the
-enclosing artifact evidence values. For `generated`, `mode` must be
-`generated`, `base_presence` must be `absent`, and `base_payload_digest` must
-be null. For `modified`, `mode` must be `modified`, `base_presence` must be
-`present`, and `base_payload_digest` must be a verified non-null digest. The
-`base_head_sha` must equal the resolved terminal packet revision's
-`repository.base_commit`. `terminal_head_sha` must equal both that resolved
-terminal packet revision's `repository.worktree.head_sha` and
-`proof.worktree.head_sha`. `artifact_path` must equal the enclosing
-`artifact_evidence.artifact_path` and be a literal member of
+object binds the immutable pre-execution baseline head, terminal head, literal
+artifact path, prior artifact state, result payload digest, deterministic diff
+digest, and validation result. The baseline capture is the exact clean
+worktree/repository snapshot taken immediately before execution starts;
+`repository.base_commit` is provenance only and must not be substituted for it.
+The baseline must fail closed on uncommitted, mutable-worktree, post-terminal,
+missing, non-blob, or repository-mismatched content. `delta_provenance.artifact_path`
+and `result_payload_digest` must equal the enclosing artifact evidence values.
+For `generated`, `mode` must be `generated`, `base_presence` must be `absent`,
+and `base_payload_digest` must be null. For `modified`, `mode` must be
+`modified`, `base_presence` must be `present`, and `base_payload_digest` must
+be a verified non-null digest. The `base_head_sha` must equal the immutable
+pre-execution baseline head captured from the exact worktree snapshot, and
+`terminal_head_sha` must equal both the proof's validated worktree head and the
+terminal blob source for `<terminal_head_sha>:<artifact_path>`. The terminal
+blob's bytes must hash to `result_payload_digest`, and its byte length must
+equal `byte_length`; if the referenced object is not a blob or the repository
+state differs, proof fails with `WORKTREE_INVALID`. If the digest or length
+differs, proof fails with `DIGEST_INVALID`. `artifact_path` must equal the
+enclosing `artifact_evidence.artifact_path` and be a literal member of
 `packet_binding.approved_writable_paths`. Generated evidence must prove that
 `artifact_path` is absent from the Git tree at `base_head_sha` and use
 `base_payload_digest: null`. Modified evidence must prove that `artifact_path`
