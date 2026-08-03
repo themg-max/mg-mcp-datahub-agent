@@ -276,7 +276,14 @@ from the complete `approval_attestation` object with only its own
 `approval_snapshot_payload`, and `approved_content_digest` is copied from the
 approved revision's final `content_digest`. The packet and proof approval
 records carry the attestation digest separately from the approval payload
-digest.
+digest. The outer `approval` mirror must equal the verified nested
+`approval_attestation` field-for-field for `approved_content_digest`,
+`approved_packet_digest`, `approval_snapshot_digest`, `human_approved`,
+`reviewer_identity`, `approved_at`, `disposition`, `approved_head_sha`, and
+`approval_attestation_digest`; the nested `packet_record_id` and `request_id`
+must resolve to the same approved packet and request as the outer binding. A
+change to any outer mirror without a corresponding attestation update is
+`PACKET_APPROVAL_MISMATCH`.
 
 An exact payload-byte digest is a separate domain. `payload_digest` is the
 SHA-256 hash of the exact bytes read from the declared artifact path, and
@@ -941,13 +948,13 @@ proof_evidence_graph:
   request_id: <request-id>
   canonical_record_digest: sha256:<64-lowercase-hex>
   nodes:
-    - node_identity: approval-attestation:<packet-approved-id>
+    - node_identity: approval-attestation:<approval-attestation-record-id>
       record_type: governed_packet_approval_attestation
       record_identity:
-        field: packet_record_id
-        value: <packet-approved-id>
+        field: record_id
+        value: <approval-attestation-record-id>
       digest_field: approval_attestation_digest
-      digest_domain: canonical_record
+      digest_domain: approval_attestation
       digest: sha256:<64-lowercase-hex>
     - node_identity: approval:<packet-approved-id>
       record_type: governed_packet_approval_payload
@@ -1004,7 +1011,7 @@ proof_evidence_graph:
       graph_root: true
   edges:
     - from_node_identity: proof:<proof-id>
-      to_node_identity: approval-attestation:<packet-approved-id>
+      to_node_identity: approval-attestation:<approval-attestation-record-id>
       relationship: binds_approval_attestation
       binding_validation: pass|fail
     - from_node_identity: proof:<proof-id>
@@ -1300,8 +1307,11 @@ pre-execution baseline head, terminal head, literal artifact path, prior
 artifact state, result payload digest, deterministic diff digest, and
 validation result. The baseline capture is the exact clean
 worktree/repository snapshot recorded in `worktree.execution_start_head_sha`
-when that binding is non-null; `repository.base_commit` is provenance only and
-must not be substituted for it. The baseline must fail closed on uncommitted,
+when that binding is non-null; when execution has not begun, the baseline
+capture is the exact clean worktree/repository snapshot recorded in
+`worktree.pre_execution_baseline_head_sha`, derived from the approved
+revision's validated `repository.worktree.head_sha`. `repository.base_commit`
+is provenance only and must not be substituted for it. The baseline must fail closed on uncommitted,
 mutable-worktree, post-terminal, missing, non-blob, or repository-mismatched
 content. `delta_provenance.artifact_path` and `result_payload_digest` must
 equal the enclosing artifact evidence values. For `generated`, `mode` must be
@@ -1335,7 +1345,10 @@ of the exact blob bytes resolved from `<base_head_sha>:<artifact_path>`, without
 decoding or newline normalization. `skipped_existing` evidence must prove that
 `artifact_path` exists at both `base_head_sha` and `terminal_head_sha` with the
 same verified bytes and byte length, and it is only valid for non-validated
-terminal profiles. `diff_digest` is the RFC 8785 JCS SHA-256 digest of a
+terminal profiles. When execution has not begun, the unchanged-existing
+branch may truthfully use `skipped_existing` against
+`worktree.pre_execution_baseline_head_sha` rather than
+`execution_start_head_sha`. `diff_digest` is the RFC 8785 JCS SHA-256 digest of a
 canonical delta-binding payload. The payload binds `schema_name`,
 `schema_version`, `request_id`, `artifact_path`, `mode`, `base_head_sha`,
 `terminal_head_sha`, `base_presence`, `base_payload_digest`,
@@ -1569,19 +1582,19 @@ approval payload and approval attestation. Its `node_identity` values must
 be unique. Every graph node declares `record_identity.field` and
 `record_identity.value`; the field is `record_id` for records that have that
 field and `packet_record_id` for `governed_packet_approval_payload`. The
-approval node's identity uses the approved revision's `packet_record_id`
-(`<packet-approved-id>`), not the validated revision's; `packet_binding` uses
-`terminal_packet_record_id` (`<packet-validated-id>`). Validation must resolve
-the declared identity field and value exactly on the bound record; it must not
-assume every bound object has `record_id`. Repeated artifact `record_type`
-values are valid when their node identities and resolved record identities are
-distinct. Artifact evidence nodes remain keyed by their own evidence record ID,
-but the evidence is admissible only after its `packet_required_artifact`
-binding resolves to exactly one packet declaration whose `artifact_id`,
-`artifact_path`, and `expected_role` match before any role-specific provenance
-rule is applied.
+approval-attestation node's identity uses the attestation record's `record_id`
+(`<approval-attestation-record-id>`), not the validated revision's;
+`packet_binding` uses `terminal_packet_record_id` (`<packet-validated-id>`).
+Validation must resolve the declared identity field and value exactly on the
+bound record; it must not assume every bound object has `record_id`.
+Repeated artifact `record_type` values are valid when their node identities and
+resolved record identities are distinct. Artifact evidence nodes remain keyed
+by their own evidence record ID, but the evidence is admissible only after its
+`packet_required_artifact` binding resolves to exactly one packet declaration
+whose `artifact_id`, `artifact_path`, and `expected_role` match before any
+role-specific provenance rule is applied.
 
-When the selected lineage profile reaches approval, the required approval node
+When the selected lineage profile reaches approval, the approval-payload node
 does not carry `approved_packet_digest` as an intrinsic field; the approval
 payload itself is the RFC 8785 JCS digest target and
 `proof.approval.approved_packet_digest` is the expected digest source. That
@@ -1589,11 +1602,15 @@ graph node therefore declares `digest_field: null` with
 `digest_target: payload_is_digest_target` and
 `expected_digest_source: proof.approval.approved_packet_digest`;
 `digest_binding_validation` records whether the externally declared digest
-matches the RFC 8785 JCS hash of the resolved payload record. For
-`terminal_proposed_initial` and `terminal_proposed_refined`, the graph must
-omit both approval carriers (approval payload and approval attestation) and
-both approval edges (`binds_approval_payload` and
-`binds_approval_attestation`); their absence is not `PROOF_INCOMPLETE`.
+matches the RFC 8785 JCS hash of the resolved payload record. The
+approval-attestation node is separate: it is identified by its attestation
+`record_id`, uses `digest_field: approval_attestation_digest`, and uses the
+`approval_attestation` digest domain over the exact attestation payload with
+only that field omitted. For `terminal_proposed_initial` and
+`terminal_proposed_refined`, the graph must omit both approval carriers
+(approval payload and approval attestation) and both approval edges
+(`binds_approval_payload` and `binds_approval_attestation`); their absence is
+not `PROOF_INCOMPLETE`.
 
 `allowed_relationships` is a normative enum with values sorted
 lexicographically: `binds_approval_attestation`,
@@ -1681,13 +1698,17 @@ The deterministic validation cases for this extension are:
   `PROOF_INCOMPLETE`.
 11. A pending `terminal_proposed_initial` or `terminal_proposed_refined`
   profile passes with `execution_status: not_started` and may mix `present`
-  evidence with `not_produced` evidence whose reason is `pending`; a validated
+  evidence with `not_produced` evidence whose reason is `pending`; if a
+  required modified artifact already exists at `pre_execution_baseline_head_sha`,
+  it may use `skipped_existing` truthfully before execution begins. A validated
   proof with any `not_produced` evidence returns `PROOF_INCOMPLETE`.
 12. `execution_start_head_sha` is profile-conditional: it is null for
   `terminal_proposed_initial`, `terminal_proposed_refined`, and
   `terminal_approved` when execution never began, and required for
   `terminal_executing` and successful `terminal_validated` where it resolves
-  from immutable execution-start lineage evidence.
+  from immutable execution-start lineage evidence. `pre_execution_baseline_head_sha`
+  is the distinct baseline binding for truthful unchanged-existing evidence
+  before execution begins.
 13. Every required evidence carrier and every resolved packet revision passes
   only when its explicit `request_id` equals `proof.request_id`; an omitted or
   mismatched request ID returns `PROOF_INCOMPLETE`.
@@ -1702,7 +1723,8 @@ The deterministic validation cases for this extension are:
   profile. Missing required provenance fields, an invalid whole-field branch,
   an invalid prior-state combination, a failed validation result, or a base-
   head, terminal-head, or artifact-path binding that differs from the proof-
-  bound repository evidence or the immutable execution-start head returns
+  bound repository evidence or the immutable execution-start head, or the
+  pre-execution baseline head when execution has not begun, returns
   `PROOF_INCOMPLETE`. A supplied `base_payload_digest`, `result_payload_digest`,
   or `diff_digest` that is malformed or does not verify returns
   `DIGEST_INVALID`. `not_produced` or `validation_output` evidence containing a
@@ -1716,7 +1738,9 @@ The deterministic validation cases for this extension are:
   evidence proves the artifact path exists at `base_head_sha`, remains
   byte-identical at `terminal_head_sha`, and preserves the verified baseline
   bytes and digest with a fail-closed terminal cause when execution stopped
-  before modification.
+  before modification. When execution has not begun, the `skipped_existing`
+  branch binds that unchanged existing artifact to
+  `pre_execution_baseline_head_sha` rather than `execution_start_head_sha`.
 
 Proof acceptance requires attributable source evidence, exact path scope,
 successful validation, visible tool inventory, and a fail-closed result for at
