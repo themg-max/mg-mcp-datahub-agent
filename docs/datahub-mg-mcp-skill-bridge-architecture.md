@@ -1120,13 +1120,26 @@ enclosing `artifact_evidence.artifact_path` and be a literal member of
 `base_payload_digest: null`. Modified evidence must prove that `artifact_path`
 exists at `base_head_sha`; its `base_payload_digest` is the lowercase SHA-256
 of the exact blob bytes resolved from `<base_head_sha>:<artifact_path>`, without
-decoding or newline normalization. `diff_digest` is the lowercase SHA-256 of
-the exact stdout bytes, without decoding, newline normalization, or other
-transformation, produced with `LC_ALL=C` by:
+decoding or newline normalization. `diff_digest` is the RFC 8785 JCS SHA-256
+digest of a canonical delta-binding payload. The payload binds `schema_name`,
+`schema_version`, `request_id`, `artifact_path`, `mode`, `base_head_sha`,
+`terminal_head_sha`, `base_presence`, `base_payload_digest`,
+`result_payload_digest`, and `result_byte_length`. Baseline and result
+digests resolve from exact Git blobs, and `diff_digest` must not depend on git
+diff stdout, color, config, locale, or any other presentation output.
 
-```text
-git --no-pager diff --binary --no-ext-diff --no-textconv \
-  <base_head_sha> <terminal_head_sha> -- <artifact_path>
+```yaml
+schema_name: governed_artifact_delta_binding
+schema_version: "1.0"
+request_id: <request-id>
+artifact_path: <literal-repository-relative-path>
+mode: generated|modified
+base_head_sha: <40-lowercase-hex>
+terminal_head_sha: <40-lowercase-hex>
+base_presence: absent|present
+base_payload_digest: <sha256:64-lowercase-hex-or-null>
+result_payload_digest: sha256:<64-lowercase-hex>
+result_byte_length: <non-negative-integer>
 ```
 
 A missing or structurally incompatible delta-provenance branch fails closed
@@ -1400,7 +1413,7 @@ The deterministic validation cases for this extension are:
   supplying a malformed `approved_packet_digest`, or supplying an
   `approved_packet_digest` that does not verify returns `DIGEST_INVALID`.
 8. Only after the approval digest verifies, binding it to the wrong approved
-  record, approved content digest, or approved worktree head returns
+  record, approved content digest, or resolved approved revision head returns
   `PACKET_APPROVAL_MISMATCH`.
 9. Presenting a `1.1` proof to a consumer that supports only `1.0` returns
   `SCHEMA_UNSUPPORTED`; no silent field dropping or downgrade is permitted.
@@ -1457,8 +1470,8 @@ The proof `context_budget.limits` must equal the packet
 `pre_retrieval_manifest.context_budget` field-for-field. The shared proof
 `approval` fields must equal the packet's `approval` fields, including
 `approved_packet_digest` and `approved_content_digest`. When the selected
-lineage profile reaches approval, `approval.approved_head_sha` must equal both
-`packet.repository.worktree.head_sha` and `proof.worktree.head_sha`. For
+lineage profile reaches approval, `approval.approved_head_sha` must equal the
+resolved approved revision's `repository.worktree.head_sha`. For
 `terminal_proposed_initial` and `terminal_proposed_refined`,
 `approval.approved_head_sha` remains null and this comparison is not performed.
 For a profile that reaches approval, `approval.approved_packet_digest` must
