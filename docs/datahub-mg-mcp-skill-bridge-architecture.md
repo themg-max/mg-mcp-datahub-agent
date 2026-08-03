@@ -1147,6 +1147,7 @@ worktree:
   path: <validated-absolute-worktree-path>
   head_sha: <40-hex>
   execution_start_head_sha: <40-hex-or-null>
+  pre_execution_baseline_head_sha: <40-hex-or-null>
   repository_root: <validated-absolute-repository-root>
   common_dir: <validated-absolute-git-common-directory>
   branch: <non-main-branch>
@@ -1212,7 +1213,11 @@ declaration's `artifact_id`. `artifact_role` must equal the declaration's
 `validation_output` declaration may only be satisfied by `validation_output`
 evidence; it may not relabel a generated or modified requirement.
 `skipped_existing` is the truthful terminal-prefix evidence form for a
-modified requirement whose existing bytes remained unchanged.
+required artifact whose existing bytes remained unchanged. It may pair with an
+`expected_role: generated` requirement when generation was safely refused
+because the target path already existed, or with an `expected_role: modified`
+requirement when modification was safely refused because the target path
+already existed.
 
 ### Proof schema 1.1 extension and compatibility
 
@@ -1296,65 +1301,71 @@ null values. Any other presence/field combination is structurally invalid and
 fails with `PROOF_INCOMPLETE`.
 
 Every `present` `generated` or `modified` artifact with
-`artifact_outcome: produced` requires a verified `delta_provenance` object
-with exactly `mode`, `base_head_sha`, `terminal_head_sha`, `artifact_path`,
-`base_presence`, `base_payload_digest`, `result_payload_digest`, `diff_digest`,
-and `validation`. The object is required only for present `generated` or
-`modified` produced evidence; no object is serialized for `validation_output`
-or `not_produced` evidence. Every object member is non-null except
-`base_payload_digest` for generated evidence. The object binds the immutable
-pre-execution baseline head, terminal head, literal artifact path, prior
-artifact state, result payload digest, deterministic diff digest, and
-validation result. The baseline capture is the exact clean
-worktree/repository snapshot recorded in `worktree.execution_start_head_sha`
-when that binding is non-null; when execution has not begun, the baseline
-capture is the exact clean worktree/repository snapshot recorded in
-`worktree.pre_execution_baseline_head_sha`, derived from the approved
-revision's validated `repository.worktree.head_sha`. `repository.base_commit`
-is provenance only and must not be substituted for it. The baseline must fail closed on uncommitted,
+`artifact_outcome: produced` or `artifact_outcome: skipped_existing` requires
+a verified `delta_provenance` object with exactly `mode`, `base_head_sha`,
+`terminal_head_sha`, `artifact_path`, `base_presence`, `base_payload_digest`,
+`result_payload_digest`, `diff_digest`, and `validation`. The object is
+required only for present `generated` or `modified` produced or skipped
+evidence; no object is serialized for `validation_output` or `not_produced`
+evidence. Every object member is non-null except `base_payload_digest` for
+generated-produced evidence. The object binds the lifecycle-applicable
+baseline head, terminal head, literal artifact path, prior artifact state,
+result payload digest, deterministic diff digest, and validation result. The
+baseline capture is the exact clean worktree/repository snapshot recorded in
+the lifecycle-applicable baseline field: `worktree.execution_start_head_sha`
+when execution has begun, otherwise `worktree.pre_execution_baseline_head_sha`.
+`repository.base_commit` is provenance only and must not be substituted for
+it. The two worktree baseline fields are mutually exclusive: exactly one may
+be non-null at a time. The baseline must fail closed on uncommitted,
 mutable-worktree, post-terminal, missing, non-blob, or repository-mismatched
 content. `delta_provenance.artifact_path` and `result_payload_digest` must
 equal the enclosing artifact evidence values. For `generated`, `mode` must be
 `generated`, `base_presence` must be `absent`, and `base_payload_digest` must
 be null. For `modified`, `mode` must be `modified`, `base_presence` must be
 `present`, and `base_payload_digest` must be a verified non-null digest. For
-`modified`, `base_payload_digest` must differ from `result_payload_digest`, and
-the artifact must be corroborated by verified tree-delta evidence such as
-`scope_check.changed_paths` or an equivalent diff binding. For
-`skipped_existing`, `artifact_role` remains `modified`, `mode` must be
-`skipped_existing`, `base_presence` must be `present`, `base_payload_digest`
-must be a verified non-null digest, `base_payload_digest` must equal
-`result_payload_digest`, the baseline and terminal byte lengths must be equal,
-the artifact path must not be represented as modified in
-`scope_check.changed_paths`, and the artifact must record an attributable
-terminal cause in `nonproduction_reason`. The `base_head_sha` must equal the
-immutable execution-start head recorded in `worktree.execution_start_head_sha`
-when that binding is non-null, and `terminal_head_sha` must equal both the
-proof's validated worktree head and the terminal blob source for
-`<terminal_head_sha>:<artifact_path>`. The terminal blob's bytes must hash to
-`result_payload_digest`, and its byte length must equal `byte_length`; if the
-referenced object is not a blob or the repository state differs, proof fails
-with `WORKTREE_INVALID`. If the digest or length differs, proof fails with
-`DIGEST_INVALID`. `artifact_path` must equal the enclosing
-`artifact_evidence.artifact_path` and be a literal member of
-`packet_binding.approved_writable_paths`. Generated evidence must prove that
-`artifact_path` is absent from the Git tree at `base_head_sha` and use
-`base_payload_digest: null`. Modified evidence must prove that `artifact_path`
-exists at `base_head_sha`; its `base_payload_digest` is the lowercase SHA-256
-of the exact blob bytes resolved from `<base_head_sha>:<artifact_path>`, without
-decoding or newline normalization. `skipped_existing` evidence must prove that
-`artifact_path` exists at both `base_head_sha` and `terminal_head_sha` with the
-same verified bytes and byte length, and it is only valid for non-validated
-terminal profiles. When execution has not begun, the unchanged-existing
-branch may truthfully use `skipped_existing` against
-`worktree.pre_execution_baseline_head_sha` rather than
-`execution_start_head_sha`. `diff_digest` is the RFC 8785 JCS SHA-256 digest of a
-canonical delta-binding payload. The payload binds `schema_name`,
-`schema_version`, `request_id`, `artifact_path`, `mode`, `base_head_sha`,
-`terminal_head_sha`, `base_presence`, `base_payload_digest`,
-`result_payload_digest`, and `result_byte_length`. Baseline and result
-digests resolve from exact Git blobs, and `diff_digest` must not depend on git
-diff stdout, color, config, locale, or any other presentation output.
+`generated` with `skipped_existing`, `artifact_role` remains `generated`,
+`mode` must be `skipped_existing`, `base_presence` must be `present`,
+`base_payload_digest` must be a verified non-null digest,
+`base_payload_digest` must equal `result_payload_digest`, the baseline and
+terminal byte lengths must be equal, the artifact path must not be represented
+as generated or modified in `scope_check.changed_paths`, and the artifact must
+record an attributable terminal cause in `nonproduction_reason`. For
+`modified` with `skipped_existing`, `artifact_role` remains `modified`, `mode`
+must be `skipped_existing`, `base_presence` must be `present`,
+`base_payload_digest` must be a verified non-null digest,
+`base_payload_digest` must equal `result_payload_digest`, the baseline and
+terminal byte lengths must be equal, the artifact path must not be represented
+as modified in `scope_check.changed_paths`, and the artifact must record an
+attributable terminal cause in `nonproduction_reason`. The `base_head_sha`
+must equal the lifecycle-applicable baseline field, and `terminal_head_sha`
+must equal both the proof's validated worktree head and the terminal blob
+source for `<terminal_head_sha>:<artifact_path>` when execution has begun; when
+execution has not begun, both heads must resolve against the pre-execution
+baseline field instead of fabricating `execution_start_head_sha`. The terminal
+blob's bytes must hash to `result_payload_digest`, and its byte length must
+equal `byte_length`; if the referenced object is not a blob or the repository
+state differs, proof fails with `WORKTREE_INVALID`. If the digest or length
+differs, proof fails with `DIGEST_INVALID`. `artifact_path` must equal the
+enclosing `artifact_evidence.artifact_path` and be a literal member of
+`packet_binding.approved_writable_paths`. Produced generated evidence must
+prove that `artifact_path` is absent from the Git tree at `base_head_sha` and
+use `base_payload_digest: null`. Produced modified evidence must prove that
+`artifact_path` exists at `base_head_sha`; its `base_payload_digest` is the
+lowercase SHA-256 of the exact blob bytes resolved from
+`<base_head_sha>:<artifact_path>`, without decoding or newline normalization.
+`skipped_existing` evidence must prove that `artifact_path` exists at both
+`base_head_sha` and `terminal_head_sha` with the same verified bytes and byte
+length, and it is only valid for non-validated terminal profiles. When the
+target path already exists, `skipped_existing` is the truthful terminal-prefix
+form for either a refused generation or a refused modification; the approved
+role stays the packet's expected role and the unchanged bytes prove the safe
+refusal. `diff_digest` is the RFC 8785 JCS SHA-256 digest of a canonical
+delta-binding payload. The payload binds `schema_name`, `schema_version`,
+`request_id`, `artifact_path`, `mode`, `base_head_sha`, `terminal_head_sha`,
+`base_presence`, `base_payload_digest`, `result_payload_digest`, and
+`result_byte_length`. Baseline and result digests resolve from exact Git
+blobs, and `diff_digest` must not depend on git diff stdout, color, config,
+locale, or any other presentation output.
 
 ```yaml
 schema_name: governed_artifact_delta_binding
@@ -1476,20 +1487,30 @@ successor sequence. Any noncanonical ordering is `PROOF_INCOMPLETE`.
 `request_id` of every required artifact-evidence carrier,
 `packet_revision_lineage`, `proof_evidence_graph`, `packet_binding`,
 `context_evidence`, `pre_retrieval_evidence`, every resolved packet revision,
-and the approval payload when the selected lineage profile reaches approval.
-Missing or mismatched required request identity fails closed with
-`PROOF_INCOMPLETE`; a carrier may not inherit or infer the proof request ID.
-The proof worktree `execution_start_head_sha` is a mirrored value only. It
-is profile-conditional: it must be null for
+the approval payload, and the approval attestation when the selected lineage
+profile reaches approval. Missing or mismatched required request identity
+fails closed with `PROOF_INCOMPLETE`; a carrier may not inherit or infer the
+proof request ID. `approval_attestation.request_id` must also equal
+`proof.request_id`; any cross-request attestation substitution is structural
+proof failure before approval can be accepted. The proof worktree `execution_start_head_sha` is a mirrored
+value only. It is profile-conditional: it must be null for
 `terminal_proposed_initial` and `terminal_proposed_refined`; it must also be
-null for `terminal_approved` when worker execution never began. It is required
-for `terminal_executing` and for the successful validated profile, where it
-must equal the immutable execution-start lineage evidence resolved at execution
-start. Only evidence produced after execution starts may use
-`delta_provenance` bound to `execution_start_head_sha`; before execution
-starts, uncreated or unmodified required work must use `not_produced` with
-`delta_provenance: null`. The proof worktree `head_sha` continues to bind the
-terminal revision.
+null for `terminal_approved` when worker execution never began.
+`pre_execution_baseline_head_sha` is the distinct baseline binding for
+truthful unchanged-existing evidence before execution begins. It is required
+for `terminal_proposed_initial`, `terminal_proposed_refined`, and
+`terminal_approved` before worker execution begins, and it resolves from the
+validated repository.worktree.head_sha of the resolved initial, refined, or
+approved revision respectively. It must be null for `terminal_executing` and
+the successful validated profile, where `execution_start_head_sha` instead is
+required and must equal the immutable execution-start lineage evidence
+resolved at execution start. The two baseline fields are mutually exclusive:
+exactly one may be non-null at a time. Only evidence produced after execution
+starts may use `delta_provenance` bound to `execution_start_head_sha`; before
+execution starts, uncreated required work must use `not_produced` with
+`delta_provenance: null`, and unchanged existing work may use
+`skipped_existing` bound to `pre_execution_baseline_head_sha`. The proof
+worktree `head_sha` continues to bind the terminal revision.
 
 Approval binds the immutable `approved` revision (sequence 2). Its approval
 payload's `packet_record_id` must equal that approved revision's `record_id`,
@@ -1664,8 +1685,10 @@ The deterministic validation cases for this extension are:
   revision returns `PROOF_INCOMPLETE`. A terminal-prefix proof may only use
   `validation_output` evidence for a declaration whose expected role is
   `validation_output`; it may not relabel a generated or modified requirement,
-  and `skipped_existing` must appear only as an outcome for `modified`
-  evidence.
+  and `skipped_existing` must appear only when the required artifact already
+  exists at the immutable baseline, including a refused generation collision
+  for `expected_role: generated` and a refused modification for
+  `expected_role: modified`.
 5. Changing one payload byte, byte length, media-bound canonical field, JCS
   serialization, digest case, or digest value returns `DIGEST_INVALID`.
 6. A missing required approval binding, `approval_attestation_digest`,
@@ -1684,13 +1707,13 @@ The deterministic validation cases for this extension are:
 10. Empty `artifact_evidence` passes only with an empty
   `packet.required_artifacts`. A terminal-prefix proof may represent each
   uncreated required artifact with a canonical `not_produced` record, null
-  payload fields, and its attributable terminal cause. A required artifact that
-  existed at the immutable baseline but remained unchanged because execution
-  stopped before modification must use the canonical `skipped_existing` record,
-  preserve the verified baseline bytes and digest, keep the baseline and
-  terminal byte lengths equal, keep `base_payload_digest` equal to
-  `result_payload_digest`, and record the attributable terminal cause. A
-  validated proof or a record for bytes that exist may not use
+  payload fields, and its attributable terminal cause. A required artifact
+  that existed at the immutable baseline but remained unchanged because the
+  worker safely refused generation or modification must use the canonical
+  `skipped_existing` record, preserve the verified baseline bytes and digest,
+  keep the baseline and terminal byte lengths equal, keep `base_payload_digest`
+  equal to `result_payload_digest`, and record the attributable terminal cause.
+  A validated proof or a record for bytes that exist may not use
   `not_produced` or `skipped_existing`. A required artifact without either
   truthful form of evidence, an invalid presence/role/outcome/provenance
   combination, a noncanonical collection order, an unresolved declared graph
@@ -1699,9 +1722,10 @@ The deterministic validation cases for this extension are:
 11. A pending `terminal_proposed_initial` or `terminal_proposed_refined`
   profile passes with `execution_status: not_started` and may mix `present`
   evidence with `not_produced` evidence whose reason is `pending`; if a
-  required modified artifact already exists at `pre_execution_baseline_head_sha`,
-  it may use `skipped_existing` truthfully before execution begins. A validated
-  proof with any `not_produced` evidence returns `PROOF_INCOMPLETE`.
+  required generated or modified artifact already exists at
+  `pre_execution_baseline_head_sha`, it may use `skipped_existing` truthfully
+  before execution begins. A validated proof with any `not_produced` evidence
+  returns `PROOF_INCOMPLETE`.
 12. `execution_start_head_sha` is profile-conditional: it is null for
   `terminal_proposed_initial`, `terminal_proposed_refined`, and
   `terminal_approved` when execution never began, and required for
@@ -1716,11 +1740,14 @@ The deterministic validation cases for this extension are:
   only when `artifact_role` matches the packet declaration's `expected_role`,
   the role-specific presence/provenance rules are satisfied, and
   `nonproduction_reason` is null for `produced` outcomes. Every present
-  `modified` artifact with `artifact_outcome: skipped_existing` passes only
-  when `artifact_role` remains `modified`, the verified baseline bytes and
-  digest are preserved, `nonproduction_reason` is a non-null attributable
-  terminal cause, and the role is only valid for a non-validated terminal
-  profile. Missing required provenance fields, an invalid whole-field branch,
+  `generated` or `modified` artifact with `artifact_outcome: skipped_existing`
+  passes only when `artifact_role` remains the packet's expected role, the
+  verified baseline bytes and digest are preserved, `nonproduction_reason` is
+  a non-null attributable terminal cause, and the role is only valid for a
+  non-validated terminal profile. For `generated`, the skipped-existing branch
+  additionally requires `scope_check.changed_paths` to avoid claiming the path
+  was generated or modified. For `modified`, it must not claim the path was
+  modified. Missing required provenance fields, an invalid whole-field branch,
   an invalid prior-state combination, a failed validation result, or a base-
   head, terminal-head, or artifact-path binding that differs from the proof-
   bound repository evidence or the immutable execution-start head, or the
@@ -1730,16 +1757,17 @@ The deterministic validation cases for this extension are:
   `DIGEST_INVALID`. `not_produced` or `validation_output` evidence containing a
   provenance object returns `PROOF_INCOMPLETE`. Generated evidence proves the
   artifact path is absent from the Git tree at `base_head_sha` and uses
-  `base_payload_digest: null`. Modified evidence proves the artifact path exists
-  at `base_head_sha`, uses the lowercase SHA-256 of the exact
-  `<base_head_sha>:<artifact_path>` blob bytes as its verified
-  `base_payload_digest`, and requires a changed-path or equivalent tree-delta
-  binding so unchanged bytes cannot be labeled modified. `skipped_existing`
-  evidence proves the artifact path exists at `base_head_sha`, remains
-  byte-identical at `terminal_head_sha`, and preserves the verified baseline
-  bytes and digest with a fail-closed terminal cause when execution stopped
-  before modification. When execution has not begun, the `skipped_existing`
-  branch binds that unchanged existing artifact to
+  `base_payload_digest: null`. Produced generated evidence must prove the
+  artifact path is absent from the Git tree at `base_head_sha`. Produced
+  modified evidence proves the artifact path exists at `base_head_sha`, uses
+  the lowercase SHA-256 of the exact `<base_head_sha>:<artifact_path>` blob
+  bytes as its verified `base_payload_digest`, and requires a changed-path or
+  equivalent tree-delta binding so unchanged bytes cannot be labeled modified.
+  `skipped_existing` evidence proves the artifact path exists at `base_head_sha`,
+  remains byte-identical at `terminal_head_sha`, and preserves the verified
+  baseline bytes and digest with a fail-closed terminal cause when execution
+  stopped before modification. When execution has not begun, the
+  `skipped_existing` branch binds that unchanged existing artifact to
   `pre_execution_baseline_head_sha` rather than `execution_start_head_sha`.
 
 Proof acceptance requires attributable source evidence, exact path scope,
