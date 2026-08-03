@@ -462,10 +462,10 @@ The exact excluded packet fields are
 `approval_digest_payload`, and `approval`. No excluded field may be used to
 reconstruct the approval payload.
 
-as an input.
-`approval_snapshot_payload` is the immutable approval snapshot payload. It is
-the exact YAML object below with only the `approval_snapshot_digest` field
-omitted from the digest target.
+`approval_snapshot_payload` is the immutable approval snapshot projection. The
+verifier derives the exact YAML object below from the resolved approved
+revision and its `approval_digest_payload`, and it omits only the
+`approval_snapshot_digest` field from the digest target.
 
 ```yaml
 schema_name: governed_packet_approval_snapshot_payload
@@ -511,7 +511,6 @@ screening:
 approved_revision:
   record_id: <packet-approved-id>
   head_sha: <40-hex>
-  content_digest: sha256:<64-lowercase-hex>
 approval_digest_payload:
   schema_name: governed_packet_approval_payload
   schema_version: "1.0"
@@ -1258,7 +1257,7 @@ schema_name: governed_artifact_delta_binding
 schema_version: "1.0"
 request_id: <request-id>
 artifact_path: <literal-repository-relative-path>
-mode: generated|modified
+mode: generated|modified|skipped_existing
 base_head_sha: <40-lowercase-hex>
 terminal_head_sha: <40-lowercase-hex>
 base_presence: absent|present
@@ -1622,13 +1621,15 @@ resolved approved revision's `repository.worktree.head_sha`. For
 `terminal_proposed_initial` and `terminal_proposed_refined`,
 `approval.approved_head_sha` remains null and this comparison is not performed.
 For a profile that reaches approval, `approval.approved_packet_digest` must
-equal the RFC 8785 JCS SHA-256 digest computed over the resolved approved revision's nested `approval_digest_payload`
-only, where the revision is resolved from `proof.approval.approved_packet_record_id`. The verifier must not
-hash the complete approved revision record, the terminal packet's payload, or
-the record identified by `packet_binding.record_id`. Separately,
+equal the RFC 8785 JCS SHA-256 digest computed over the resolved approved
+revision's `approval_digest_payload` only, where the revision is resolved from
+`proof.approval.approved_packet_record_id`. The verifier must not hash the
+complete approved revision record, the terminal packet's payload, or the
+record identified by `packet_binding.record_id`. Separately,
 `approval.approval_snapshot_digest` must equal the RFC 8785 JCS SHA-256 digest
-computed over the resolved approved revision's nested `approval_snapshot_payload`
-only, where the revision is resolved from `proof.approval.approved_packet_record_id`.
+computed over the deterministic `approval_snapshot_payload` projection derived
+from the resolved approved revision and its `approval_digest_payload`, where
+the revision is resolved from `proof.approval.approved_packet_record_id`.
 `approval.approved_content_digest` must equal the approved revision's
 `content_digest` captured at approval time. A missing or unresolved required
 binding or digest fails with `PROOF_INCOMPLETE`; a present malformed or
