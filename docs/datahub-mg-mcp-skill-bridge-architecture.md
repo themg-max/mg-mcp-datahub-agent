@@ -426,6 +426,7 @@ approval:
   approved_head_sha: null
   approved_packet_digest: null
   approved_content_digest: null
+  approval_snapshot_digest: null
   validation: pass|fail
 ```
 
@@ -454,13 +455,27 @@ The exact excluded packet fields are
 `approval_digest_payload`, and `approval`. No excluded field may be used to
 reconstruct the approval payload.
 
+`approval_snapshot_payload` is the immutable non-cyclic approval snapshot
+domain. It is captured before any approval-result fields are attached and it
+binds the approved revision's exact immutable identity, repository/worktree
+head, and approval-immune packet fields. Its canonical exclusions are the
+packet's `approval`, `approved_packet_digest`, `approved_content_digest`, and
+`approval_snapshot_digest` fields, every terminal-successor-only field, and any
+field whose value depends on the final packet `content_digest`. The
+`approval_snapshot_digest` is the RFC 8785 JCS SHA-256 digest of that snapshot
+payload. Approved and successor revisions bind to the same immutable snapshot
+domain, and no approval binding may require the final packet `content_digest`
+as an input.
+
 `approved_content_digest` records the approved revision's `content_digest` at
 approval time. The packet and proof approval bindings must each carry the same
-`approved_packet_digest` approval-payload digest and the same
-`approved_content_digest` approved-revision snapshot. A mutation to the
+`approved_packet_digest` approval-payload digest, the same
+`approval_snapshot_digest` immutable snapshot digest, and the same
+`approved_content_digest` approved-revision snapshot mirror. A mutation to the
 approved revision or its approval payload invalidates approval:
 `human_approved` becomes false, approval identity, timestamp, disposition,
-approved head, approved packet digest, and approved content digest are cleared,
+approved head, approved packet digest, approval snapshot digest, and approved
+content digest are cleared,
 and execution is blocked with `PACKET_APPROVAL_MISMATCH` until the packet is
 re-approved. A conforming executing or validated successor revision does not
 mutate the approved revision and does not invalidate approval.
@@ -613,7 +628,7 @@ artifact_evidence:
     request_id: <request-id>
     packet_required_artifact: <exact-packet-required-artifact-entry>
     artifact_path: <literal-repository-relative-path>
-    artifact_role: generated|modified|validation_output
+    artifact_role: generated|modified|validation_output|skipped_existing
     media_type: <lowercase-IANA-type-subtype-without-parameters>
     presence: present|not_produced
     nonproduction_reason: <pending|approval_rejected|timeout|blocked|failed|unknown|null>
@@ -1190,18 +1205,18 @@ prefix edges. Their final revision is the actual terminal packet revision:
 No terminal profile may add an `executing` or `validated` revision after a
 blocked, failed, rejected, timed-out, or unknown result.
 
-For every profile, each nonterminal revision must use its canonical
-wrapper-status/execution-status pair (`proposed/not_started`,
-`approved/approved`, or `executing/executing`). The successful terminal pair is
-`validated/validated`. A terminal-prefix final revision may use its canonical
-pair only when its result is still pending, including
-`proposed/not_started`, or one of
-`proposed/blocked`, `proposed/failed`, `approved/blocked`, `approved/failed`,
-`executing/blocked`, `executing/failed`, `blocked/blocked`, or
-`blocked/failed`; rejected, timed-out, and unknown outcomes require a
-fail-closed terminal pair plus attributable failure, retrieval, or authority
-evidence. This table defines all allowed wrapper-status and execution-status
-combinations for every transition and terminal revision.
+Allowed terminal status and execution-status pairs are profile-specific:
+
+- `terminal_proposed_initial` and `terminal_proposed_refined`: `proposed/not_started`, `proposed/blocked`, or `proposed/failed` only.
+- `terminal_approved`: `approved/approved`, `approved/blocked`, or `approved/failed` only.
+- `terminal_executing`: `executing/executing`, `executing/blocked`, or `executing/failed` only.
+- `terminal_validated`: `validated/validated` only.
+
+No profile may claim a later stage than the revisions it actually contains.
+Rejected, timed-out, and unknown outcomes require a fail-closed terminal pair
+plus attributable failure, retrieval, or authority evidence. This table
+defines all allowed wrapper-status and execution-status combinations for every
+transition and terminal revision.
 
 `packet_schema_version` declares the schema version of every bound packet
 revision; a lineage that uses authorization carry-forward must declare `1.1`
@@ -1257,9 +1272,11 @@ successor sequence. Any noncanonical ordering is `PROOF_INCOMPLETE`.
 and the approval payload when the selected lineage profile reaches approval.
 Missing or mismatched required request identity fails closed with
 `PROOF_INCOMPLETE`; a carrier may not inherit or infer the proof request ID.
-The proof worktree `execution_start_head_sha` must equal every present
-artifact-evidence `delta_provenance.base_head_sha`; the proof worktree
-`head_sha` continues to bind the terminal revision.
+The proof worktree `execution_start_head_sha` is a mirrored value only. It
+must equal the immutable execution-start lineage evidence resolved at execution
+start, and every present artifact-evidence `delta_provenance.base_head_sha`
+must equal that independently resolved head. The proof worktree `head_sha`
+continues to bind the terminal revision.
 
 Approval binds the immutable `approved` revision (sequence 2). Its approval
 payload's `packet_record_id` must equal that approved revision's `record_id`,
@@ -1267,21 +1284,22 @@ not the validated revision. For packet schema `1.1`, the `executing` and
 `validated` revisions supersede the approved revision without mutating it; they
 carry a
 carrier-only `authorization_binding` that identifies the approved packet record
-ID, its `approved_content_digest`, and its `approved_packet_digest`. The `approve`-to-`execute` and
+ID, the immutable `approval_snapshot_digest`, its `approved_content_digest`, and its `approved_packet_digest`. The `approve`-to-`execute` and
 `execute`-to-`validate` edges verify this authorization carry-forward through
 `authorization_carry_forward_validation`. Only mutation of the approved revision
 itself or its approval payload invalidates approval; conforming `1.1` successor
 creation does not. Packet schema `1.0` instead invalidates approval on every
 successor creation and requires reapproval. `proof.approval.approved_packet_record_id`,
-`approved_packet_digest`, `approved_content_digest`, and
+`approval_snapshot_digest`, `approved_packet_digest`, `approved_content_digest`, and
 `terminal_packet_record_id` capture this binding.
 `lineage_authorization_validation` is `pass` only when the terminal wrapper's
 authorization source matches the proof's approval fields. For an `executing`
 or `validated` successor, the terminal wrapper's structured
 `authorization_binding` digests must match those fields. For the approved
 revision itself, the wrapper sentinel `authorization_binding: self` resolves
-to that revision's own `record_id`, verified `approval_digest_payload` digest,
-and `content_digest`. The `self` form is valid on the approved revision whether
+to that revision's own `record_id`, immutable `approval_snapshot_digest`,
+verified `approval_digest_payload` digest, and `content_digest`. The `self`
+form is valid on the approved revision whether
 or not that revision is terminal or has conforming successors. No resolved packet
 field or packet content digest is used to carry or verify authorization binding.
 
@@ -1416,25 +1434,28 @@ The deterministic validation cases for this extension are:
   revision returns `PROOF_INCOMPLETE`.
 5. Changing one payload byte, byte length, media-bound canonical field, JCS
   serialization, digest case, or digest value returns `DIGEST_INVALID`.
-6. A missing required approval binding or `approved_packet_digest` returns
-  `PROOF_INCOMPLETE`.
+6. A missing required approval binding, `approved_packet_digest`, or
+  `approval_snapshot_digest` returns `PROOF_INCOMPLETE`.
 7. Changing approval-payload bytes without recomputing the declared digest,
-  supplying a malformed `approved_packet_digest`, or supplying an
-  `approved_packet_digest` that does not verify returns `DIGEST_INVALID`.
+  supplying a malformed `approved_packet_digest` or `approval_snapshot_digest`,
+  or supplying either digest that does not verify returns `DIGEST_INVALID`.
 8. Only after the approval digest verifies, binding it to the wrong approved
-  record, approved content digest, or resolved approved revision head returns
-  `PACKET_APPROVAL_MISMATCH`.
+  record, approved content digest, approval snapshot digest, or resolved
+  approved revision head returns `PACKET_APPROVAL_MISMATCH`.
 9. Presenting a `1.1` proof to a consumer that supports only `1.0` returns
   `SCHEMA_UNSUPPORTED`; no silent field dropping or downgrade is permitted.
 10. Empty `artifact_evidence` passes only with an empty
   `packet.required_artifacts`. A terminal-prefix proof may represent each
   uncreated required artifact with a canonical `not_produced` record, null
-  payload fields, and its attributable terminal cause; a validated proof or a
-  record for bytes that exist may not use `not_produced`. A required artifact
-  without either truthful form of evidence, an invalid presence/field
-  combination, a noncanonical collection order, an unresolved declared graph
-  identity, or a graph node unreachable from the root returns
-  `PROOF_INCOMPLETE`.
+  payload fields, and its attributable terminal cause. A required artifact that
+  existed at the immutable baseline but remained unchanged because execution
+  stopped before modification must use the canonical `skipped_existing` record,
+  preserve the verified baseline bytes and digest, and record the attributable
+  terminal cause. A validated proof or a record for bytes that exist may not use
+  `not_produced` or `skipped_existing`. A required artifact without either
+  truthful form of evidence, an invalid presence/field combination, a
+  noncanonical collection order, an unresolved declared graph identity, or a
+  graph node unreachable from the root returns `PROOF_INCOMPLETE`.
 11. A pending `terminal_proposed_initial` or `terminal_proposed_refined`
   profile passes with `execution_status: not_started` and may mix `present`
   evidence with `not_produced` evidence whose reason is `pending`; a validated
@@ -1442,20 +1463,25 @@ The deterministic validation cases for this extension are:
 12. Every required evidence carrier and every resolved packet revision passes
   only when its explicit `request_id` equals `proof.request_id`; an omitted or
   mismatched request ID returns `PROOF_INCOMPLETE`.
-13. Every present `generated` or `modified` artifact passes only with verified
-  delta provenance. Missing required provenance fields, an invalid whole-field
-  branch, an invalid prior-state combination, a failed validation result, or a
-  base-head, terminal-head, or artifact-path binding that differs from the
-  proof-bound repository evidence or the immutable execution-start head returns
-  `PROOF_INCOMPLETE`. A supplied `base_payload_digest`, `result_payload_digest`,
-  or `diff_digest` that is malformed or does not verify returns `DIGEST_INVALID`.
-  `not_produced` or `validation_output` evidence containing a provenance object
-  returns `PROOF_INCOMPLETE`. Generated evidence proves the artifact path is
-  absent from the Git tree at `base_head_sha` and uses `base_payload_digest: null`.
+13. Every present `generated`, `modified`, or `skipped_existing` artifact passes
+  only with verified delta provenance. Missing required provenance fields, an
+  invalid whole-field branch, an invalid prior-state combination, a failed
+  validation result, or a base-head, terminal-head, or artifact-path binding
+  that differs from the proof-bound repository evidence or the immutable
+  execution-start head returns `PROOF_INCOMPLETE`. A supplied
+  `base_payload_digest`, `result_payload_digest`, or `diff_digest` that is
+  malformed or does not verify returns `DIGEST_INVALID`. `not_produced` or
+  `validation_output` evidence containing a provenance object returns
+  `PROOF_INCOMPLETE`. Generated evidence proves the artifact path is absent from
+  the Git tree at `base_head_sha` and uses `base_payload_digest: null`.
   Modified evidence proves the artifact path exists at `base_head_sha`, uses the
   lowercase SHA-256 of the exact `<base_head_sha>:<artifact_path>` blob bytes as
   its verified `base_payload_digest`, and requires a changed-path or equivalent
   tree-delta binding so unchanged bytes cannot be labeled modified.
+  `skipped_existing` evidence proves the artifact path exists at
+  `base_head_sha`, remains byte-identical at `terminal_head_sha`, and preserves
+  the verified baseline bytes and digest with a fail-closed terminal cause when
+  execution stopped before modification.
 
 Proof acceptance requires attributable source evidence, exact path scope,
 successful validation, visible tool inventory, and a fail-closed result for at
@@ -1654,7 +1680,7 @@ is deterministic and uses the first matching condition in this order:
 | A supplied canonical-record or payload-byte digest, or byte length, is malformed or does not verify | `DIGEST_INVALID` |
 | Required request-ID equality, artifact presence matrix, or delta-provenance branch is missing, structurally incompatible, has an invalid prior-state combination, has a failed validation result, or has a head/path binding that differs from proof-bound repository evidence or the immutable execution-start head | `PROOF_INCOMPLETE` |
 | A supplied delta-provenance base, result, or diff digest is malformed or does not verify | `DIGEST_INVALID` |
-| Required artifact, artifact identity, media type, proof graph node, packet revision, edge, status, or `supersedes` evidence is missing or structurally invalid | `PROOF_INCOMPLETE` |
+| Required artifact, artifact identity, media type, proof graph node, packet revision, edge, status, skipped-existing evidence, or `supersedes` evidence is missing or structurally invalid | `PROOF_INCOMPLETE` |
 | Packet revision or proof graph contains a duplicate identity, skipped or reordered entry, substitution, backward reference, or cycle | `PROOF_INCOMPLETE` |
 
 - **Approval:** use `APPROVAL_REQUIRED`, `APPROVAL_INVALID`, or
