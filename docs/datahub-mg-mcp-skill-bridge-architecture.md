@@ -288,17 +288,38 @@ corresponding attestation update is `PACKET_APPROVAL_MISMATCH`.
 A locally produced hash of the reviewer fields is integrity-only evidence; it
 does not establish human approval authenticity. The attestation is authoritative
 only when it also carries an `approval_event_binding` that resolves reviewer-
-authenticated evidence through the existing `external_exact` pattern. The event
-binding must be bound to the trusted source system, repository and pull request
-identity, immutable event locator, source review or approval-event ID,
-authenticated reviewer identity, reviewer-authority validation, disposition,
-approved packet record ID, approved packet digest, approval snapshot digest,
-approved head SHA, approval timestamp, expected source-event digest, exact
-resolution validation, and authentication validation. Missing or unresolved
+authenticated evidence through the immutable event carrier below. That binding
+is a separate RFC 8785 JCS SHA-256 domain named `github_approval_event`, and
+its digest target is the nested `event_projection` object only. The digest must
+not include raw REST or GraphQL response bytes, HTML, transport headers,
+transport metadata, implementation-dependent field ordering, or the
+`expected_source_event_digest` field itself. The event projection records the
+GitHub source identity, repository and PR identity, immutable review/event ID
+and locator, authenticated reviewer identity, state, disposition, submitted
+timestamp, reviewed commit SHA, and the packet, snapshot, and head claims
+authenticated by the event. Those claims are the immutable reviewer-authenticated
+inputs; producer-copied sibling values are not evidence.
+
+After the event projection verifies, `authenticated_reviewer_identity` must
+equal the attestation reviewer identity, the event disposition/state must equal
+the attestation disposition, the event approval timestamp must equal the
+attestation `approved_at` value, the event packet record ID must equal the
+attestation `packet_record_id`, the event packet digest must equal the
+attestation `approved_packet_digest`, the event snapshot digest must equal the
+attestation `approval_snapshot_digest`, the event approved head must equal the
+attestation `approved_head_sha`, and the repository and pull request identity
+must equal the declared approval source. `human_approved` is true if and only
+if the event state is `APPROVED`, reviewer authority validation passes, exact
+resolution validation passes, authentication validation passes, and the event
+projection claims match the attestation and outer approval for reviewer
+identity, timestamp, disposition/state, packet record ID, packet digest,
+snapshot digest, approved head, repository, and PR identity. `COMMENTED`,
+`CHANGES_REQUESTED`, `DISMISSED`, `PENDING`, missing, unknown, unauthorized, or
+unauthenticated events must not authorize execution. Missing or unresolved
 event evidence is `PROOF_INCOMPLETE`; a malformed or non-verifying event digest
 is `DIGEST_INVALID`; an unauthorized reviewer or unauthenticated event is
 `APPROVAL_INVALID`; and authenticated evidence bound to the wrong packet,
-scope, snapshot, or head is `PACKET_APPROVAL_MISMATCH`.
+scope, snapshot, digest, or head is `PACKET_APPROVAL_MISMATCH`.
 
 An exact payload-byte digest is a separate domain. `payload_digest` is the
 SHA-256 hash of the exact bytes read from the declared artifact path, and
@@ -473,7 +494,41 @@ approval:
   approved_content_digest: null
   approval_snapshot_digest: null
   approval_attestation_digest: null
-  approval_event_binding: null
+  approval_event_binding:
+    schema_name: governed_github_approval_event
+    schema_version: "1.0"
+    record_type: governed_github_approval_event
+    record_id: github-approval-event-<stable-id>
+    digest_domain: github_approval_event
+    canonicalization: RFC8785
+    hash_algorithm: SHA-256
+    source_system: GitHub
+    repository_owner: <owner>
+    repository_name: <repo>
+    pull_request_number: <pr-number>
+    review_or_approval_event_id: <source-review-or-approval-event-id>
+    immutable_locator: <immutable-event-locator>
+    event_projection:
+      source_system: GitHub
+      repository_owner: <owner>
+      repository_name: <repo>
+      pull_request_number: <pr-number>
+      source_class: github_pull_request_review
+      source_id: <source-review-or-approval-event-id>
+      immutable_locator: <immutable-event-locator>
+      authenticated_reviewer_identity: null
+      state: APPROVED|COMMENTED|CHANGES_REQUESTED|DISMISSED|PENDING
+      disposition: null
+      submitted_at: <ISO-8601>
+      reviewed_commit_sha: <40-hex>
+      approved_packet_record_id: <packet-stable-id>
+      approved_packet_digest: null
+      approval_snapshot_digest: null
+      approved_head_sha: null
+    reviewer_authority_validation: pass|fail
+    exact_resolution_validation: pass|fail
+    authentication_validation: pass|fail
+    expected_source_event_digest: sha256:<64-lowercase-hex>
   approval_attestation:
     schema_name: governed_packet_approval_attestation
     schema_version: "1.0"
@@ -491,25 +546,40 @@ approval:
     approved_head_sha: null
     approval_attestation_digest: null
     approval_event_binding:
-      mode: external_exact
-      trusted_source_system: GitHub
+      schema_name: governed_github_approval_event
+      schema_version: "1.0"
+      record_type: governed_github_approval_event
+      record_id: github-approval-event-<stable-id>
+      digest_domain: github_approval_event
+      canonicalization: RFC8785
+      hash_algorithm: SHA-256
+      source_system: GitHub
       repository_owner: <owner>
       repository_name: <repo>
       pull_request_number: <pr-number>
-      source_class: github_pull_request_review
-      source_id: <source-review-or-approval-event-id>
+      review_or_approval_event_id: <source-review-or-approval-event-id>
       immutable_locator: <immutable-event-locator>
-      authenticated_reviewer_identity: null
+      event_projection:
+        source_system: GitHub
+        repository_owner: <owner>
+        repository_name: <repo>
+        pull_request_number: <pr-number>
+        source_class: github_pull_request_review
+        source_id: <source-review-or-approval-event-id>
+        immutable_locator: <immutable-event-locator>
+        authenticated_reviewer_identity: null
+        state: APPROVED|COMMENTED|CHANGES_REQUESTED|DISMISSED|PENDING
+        disposition: null
+        submitted_at: <ISO-8601>
+        reviewed_commit_sha: <40-hex>
+        approved_packet_record_id: <packet-stable-id>
+        approved_packet_digest: null
+        approval_snapshot_digest: null
+        approved_head_sha: null
       reviewer_authority_validation: pass|fail
-      disposition: null
-      approved_packet_record_id: <packet-stable-id>
-      approved_packet_digest: null
-      approval_snapshot_digest: null
-      approved_head_sha: null
-      approval_timestamp: null
-      expected_source_event_digest: sha256:<64-lowercase-hex>
       exact_resolution_validation: pass|fail
       authentication_validation: pass|fail
+      expected_source_event_digest: sha256:<64-lowercase-hex>
   validation: pass|fail
 ```
 
@@ -521,7 +591,12 @@ affirmative `human_approved: true`, a non-empty `reviewer_identity`, an
 `approved_head_sha` equal to the exact validated local worktree `head_sha`.
 For schema-1.1 carried successors, the approval binding is validated against
 the resolved approved revision rather than the successor terminal head. A
-missing, stale, or mismatched approval blocks execution.
+missing, stale, or mismatched approval blocks execution. `human_approved` is
+true if and only if event state is `APPROVED`, reviewer authority validation
+passes, exact resolution validation passes, authentication validation passes,
+and the event projection claims match the attestation and outer approval for
+reviewer identity, timestamp, disposition/state, packet record ID, packet
+digest, snapshot digest, approved head, repository, and PR identity.
 
 `approval_digest_payload` is the immutable pre-approval payload. It is the exact
 object shown in the packet schema, with `packet_record_id` equal to the packet
@@ -886,6 +961,38 @@ packet_revision_lineage:
         approved_packet_digest: sha256:<64-lowercase-hex>
         approved_content_digest: sha256:<64-lowercase-hex>
         approval_attestation_digest: sha256:<64-lowercase-hex>
+        authorized_scope_projection:
+          objective: safe dbt schema migration
+          source_mode: OFFLINE_FIXTURE|ISOLATED_DATAHUB_READ_ONLY
+          source_mode_policy: allowed
+          context_record_id: <context-record-id>
+          context_content_digest: sha256:<64-lowercase-hex>
+          pre_retrieval_manifest_digest: sha256:<64-lowercase-hex>
+          repository_owner: <owner>
+          repository_name: <repo>
+          repository_base_commit: <40-lowercase-hex>
+          branch: <non-main-branch>
+          worktree_identity: <validated-absolute-worktree-path-and-git-common-dir>
+          worktree_path: <validated-absolute-worktree-path>
+          worktree_root: <validated-absolute-repository-root>
+          worktree_common_dir: <validated-absolute-git-common-directory>
+          readable_paths: []
+          writable_paths: []
+          datahub_facts_relied_on: []
+          mg_mcp_records_relied_on: []
+          authorized_tools: []
+          denied_tools: []
+          allowed_commands: []
+          required_artifacts: []
+          validation: []
+          stop_condition: <stop-condition>
+          expires_at: <ISO-8601>
+          screening:
+            instruction_trust: data_only
+            sanitization_status: pending|pass|failed
+            injection_scan_status: pending|pass|failed
+            validation: pass|fail
+            quarantined_records: []
     - sequence: 4
       revision_label: validated
       record_type: governed_development_work_packet
@@ -904,6 +1011,38 @@ packet_revision_lineage:
         approved_packet_digest: sha256:<64-lowercase-hex>
         approved_content_digest: sha256:<64-lowercase-hex>
         approval_attestation_digest: sha256:<64-lowercase-hex>
+        authorized_scope_projection:
+          objective: safe dbt schema migration
+          source_mode: OFFLINE_FIXTURE|ISOLATED_DATAHUB_READ_ONLY
+          source_mode_policy: allowed
+          context_record_id: <context-record-id>
+          context_content_digest: sha256:<64-lowercase-hex>
+          pre_retrieval_manifest_digest: sha256:<64-lowercase-hex>
+          repository_owner: <owner>
+          repository_name: <repo>
+          repository_base_commit: <40-lowercase-hex>
+          branch: <non-main-branch>
+          worktree_identity: <validated-absolute-worktree-path-and-git-common-dir>
+          worktree_path: <validated-absolute-worktree-path>
+          worktree_root: <validated-absolute-repository-root>
+          worktree_common_dir: <validated-absolute-git-common-directory>
+          readable_paths: []
+          writable_paths: []
+          datahub_facts_relied_on: []
+          mg_mcp_records_relied_on: []
+          authorized_tools: []
+          denied_tools: []
+          allowed_commands: []
+          required_artifacts: []
+          validation: []
+          stop_condition: <stop-condition>
+          expires_at: <ISO-8601>
+          screening:
+            instruction_trust: data_only
+            sanitization_status: pending|pass|failed
+            injection_scan_status: pending|pass|failed
+            validation: pass|fail
+            quarantined_records: []
   edges:
     - predecessor_record_id: <packet-proposed-initial-id>
       predecessor_content_digest: sha256:<64-lowercase-hex>
@@ -1158,7 +1297,41 @@ approval:
   approved_content_digest: null
   approval_snapshot_digest: null
   approval_attestation_digest: null
-  approval_event_binding: null
+  approval_event_binding:
+    schema_name: governed_github_approval_event
+    schema_version: "1.0"
+    record_type: governed_github_approval_event
+    record_id: github-approval-event-<stable-id>
+    digest_domain: github_approval_event
+    canonicalization: RFC8785
+    hash_algorithm: SHA-256
+    source_system: GitHub
+    repository_owner: <owner>
+    repository_name: <repo>
+    pull_request_number: <pr-number>
+    review_or_approval_event_id: <source-review-or-approval-event-id>
+    immutable_locator: <immutable-event-locator>
+    event_projection:
+      source_system: GitHub
+      repository_owner: <owner>
+      repository_name: <repo>
+      pull_request_number: <pr-number>
+      source_class: github_pull_request_review
+      source_id: <source-review-or-approval-event-id>
+      immutable_locator: <immutable-event-locator>
+      authenticated_reviewer_identity: null
+      state: APPROVED|COMMENTED|CHANGES_REQUESTED|DISMISSED|PENDING
+      disposition: null
+      submitted_at: <ISO-8601>
+      reviewed_commit_sha: <40-hex>
+      approved_packet_record_id: <packet-stable-id>
+      approved_packet_digest: null
+      approval_snapshot_digest: null
+      approved_head_sha: null
+    reviewer_authority_validation: pass|fail
+    exact_resolution_validation: pass|fail
+    authentication_validation: pass|fail
+    expected_source_event_digest: sha256:<64-lowercase-hex>
   approval_attestation:
     schema_name: governed_packet_approval_attestation
     schema_version: "1.0"
@@ -1176,25 +1349,40 @@ approval:
     approved_head_sha: null
     approval_attestation_digest: null
     approval_event_binding:
-      mode: external_exact
-      trusted_source_system: GitHub
+      schema_name: governed_github_approval_event
+      schema_version: "1.0"
+      record_type: governed_github_approval_event
+      record_id: github-approval-event-<stable-id>
+      digest_domain: github_approval_event
+      canonicalization: RFC8785
+      hash_algorithm: SHA-256
+      source_system: GitHub
       repository_owner: <owner>
       repository_name: <repo>
       pull_request_number: <pr-number>
-      source_class: github_pull_request_review
-      source_id: <source-review-or-approval-event-id>
+      review_or_approval_event_id: <source-review-or-approval-event-id>
       immutable_locator: <immutable-event-locator>
-      authenticated_reviewer_identity: null
+      event_projection:
+        source_system: GitHub
+        repository_owner: <owner>
+        repository_name: <repo>
+        pull_request_number: <pr-number>
+        source_class: github_pull_request_review
+        source_id: <source-review-or-approval-event-id>
+        immutable_locator: <immutable-event-locator>
+        authenticated_reviewer_identity: null
+        state: APPROVED|COMMENTED|CHANGES_REQUESTED|DISMISSED|PENDING
+        disposition: null
+        submitted_at: <ISO-8601>
+        reviewed_commit_sha: <40-hex>
+        approved_packet_record_id: <packet-stable-id>
+        approved_packet_digest: null
+        approval_snapshot_digest: null
+        approved_head_sha: null
       reviewer_authority_validation: pass|fail
-      disposition: null
-      approved_packet_record_id: <packet-stable-id>
-      approved_packet_digest: null
-      approval_snapshot_digest: null
-      approved_head_sha: null
-      approval_timestamp: null
-      expected_source_event_digest: sha256:<64-lowercase-hex>
       exact_resolution_validation: pass|fail
       authentication_validation: pass|fail
+      expected_source_event_digest: sha256:<64-lowercase-hex>
   approved_packet_record_id: null
   terminal_packet_record_id: null
   lineage_authorization_validation: pass|fail
@@ -1424,7 +1612,12 @@ enclosing `artifact_evidence.artifact_path` and be a literal member of
 `packet_binding.approved_writable_paths`. Produced generated evidence must
 prove that `artifact_path` is absent from the Git tree at `base_head_sha` and
 use `base_payload_digest: null`. Produced modified evidence must prove that
-`artifact_path` exists at `base_head_sha`; its `base_payload_digest` is the
+`artifact_path` exists at `base_head_sha`; its `base_payload_digest` and
+`result_payload_digest` must both be verified, non-null, and unequal; the
+path must appear in a repository-derived baseline-to-terminal tree delta, and
+`scope_check.changed_paths` is not sufficient merely because the path is
+writable. Equal verified blob bytes must use `skipped_existing` and are
+invalid as produced modified evidence. The `base_payload_digest` is the
 lowercase SHA-256 of the exact blob bytes resolved from
 `<base_head_sha>:<artifact_path>`, without decoding or newline normalization.
 `skipped_existing` evidence must prove that `artifact_path` exists at both
@@ -1787,17 +1980,27 @@ The deterministic validation cases for this extension are:
   serialization, digest case, or digest value returns `DIGEST_INVALID`.
 6. A missing required approval binding, `approval_attestation_digest`,
   `approval_event_binding`, `approved_packet_digest`, or
-  `approval_snapshot_digest` returns `PROOF_INCOMPLETE`.
-7. Changing approval-attestation bytes, approval-event bytes, or
+  `approval_snapshot_digest` returns `PROOF_INCOMPLETE`. The packet approval
+  schema, proof approval schema, and approval attestation
+  `approval_event_binding` must be structurally identical in the fields used to
+  describe the immutable event carrier and event projection; any field mismatch
+  among those three representations returns `PROOF_INCOMPLETE`.
+7. Changing approval-attestation bytes, approval-event projection bytes, or
   approval-payload bytes without recomputing the declared digest, supplying a
   malformed `approval_attestation_digest`,
   `approval_event_binding.expected_source_event_digest`,
   `approved_packet_digest`, or `approval_snapshot_digest`, or supplying any of
-  those digests that does not verify returns `DIGEST_INVALID`.
+  those digests that does not verify returns `DIGEST_INVALID`. Equivalent API
+  transport formatting that resolves to the same event projection must produce
+  the same digest; any content change to the event projection without digest
+  recomputation returns `DIGEST_INVALID`.
 8. Only after the attestation, event, and approval digests verify, binding
   them to the wrong approved record, approval scope projection, approved
   content digest, approval snapshot digest, or resolved approved revision head
-  returns `PACKET_APPROVAL_MISMATCH`.
+  returns `PACKET_APPROVAL_MISMATCH`. Reviewer identity, timestamp,
+  disposition/state, packet record ID, packet digest, snapshot digest, approved
+  head, repository, and PR identity must all match across the event projection,
+  attestation, and outer approval.
 9. Presenting a `1.1` proof to a consumer that supports only `1.0` returns
   `SCHEMA_UNSUPPORTED`; no silent field dropping or downgrade is permitted.
 10. Empty `artifact_evidence` passes only with an empty
