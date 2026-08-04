@@ -300,7 +300,8 @@ GitHub source identity, repository and PR identity, immutable review/event ID
 and locator, authenticated reviewer identity, state, disposition, submitted
 timestamp, the reviewed commit SHA natively attached to the trusted review,
 and the packet record, packet digest, snapshot digest, approved head, and
-approved content digest supplied by the same existing immutable reviewer-
+
+and approved content digest supplied by the same existing immutable reviewer-
 authenticated custom claim set. Source-event resolution must extract those
 custom claims from that immutable claim set without selecting a new carrier or
 encoding. The packet or proof producer must not select, infer, recompute, copy
@@ -310,6 +311,57 @@ copied sibling values are not evidence. Every field in the complete nested
 `event_projection`, including `reviewed_commit_sha`, `approved_content_digest`,
 and `approved_head_sha`, remains inside the `github_approval_event` RFC 8785 JCS
 SHA-256 digest target and is not among its exclusions.
+
+### Reviewer-authenticated approval-claims carrier
+
+The immutable GitHub `github_pull_request_review` event remains the source
+event. The review body is the sole carrier for application-specific approval
+claims that are not native review fields.
+
+An approving event (`state: APPROVED`) must contain exactly one approval-claims
+block, delimited by the literal markers `<!-- governed-approval-claims:start -->`
+and `<!-- governed-approval-claims:end -->`.
+
+The only accepted serialization is UTF-8 without a BOM, with exactly one
+fenced YAML document between those markers:
+
+```yaml
+~~~yaml
+schema_name: governed_github_approval_claims
+schema_version: "1.0"
+approved_packet_record_id: <packet-stable-id>
+approved_packet_digest: sha256:<64-lowercase-hex>
+approval_snapshot_digest: sha256:<64-lowercase-hex>
+approved_content_digest: sha256:<64-lowercase-hex>
+approved_head_sha: <40-lowercase-hex>
+~~~
+```
+
+Rules:
+
+- Required fields: `schema_name`, `schema_version`,
+  `approved_packet_record_id`, `approved_packet_digest`,
+  `approval_snapshot_digest`, `approved_content_digest`, and
+  `approved_head_sha`.
+- Allowed fields: exactly the required fields above and no others.
+- `schema_name` must equal `governed_github_approval_claims`.
+- `schema_version` must equal `"1.0"`.
+- `approved_head_sha` must equal the native `reviewed_commit_sha`.
+- Duplicate keys, YAML aliases, anchors, tags, merge keys, null required
+  values, missing fields, unknown fields, malformed digests, malformed SHAs,
+  more than one claims block, or any ambiguous block fail closed.
+- The parser deterministically maps the claims into `event_projection` and must
+  not infer any claim value from sibling packet, proof, or attestation fields.
+- The RFC 8785 JCS SHA-256 digest target is the parsed `event_projection`
+  object after claims are bound to the native review fields; raw Markdown,
+  markers, and fence bytes are excluded.
+- Failure precedence is fixed: a missing required claims block or multiple/
+  ambiguous blocks are `PROOF_INCOMPLETE`; malformed serialization, duplicate
+  keys, malformed values, or a non-verifying event digest are `DIGEST_INVALID`;
+  an unauthorized reviewer or unauthenticated source event are
+  `APPROVAL_INVALID`; authenticated claims bound to the wrong packet, snapshot,
+  content digest, or head are `PACKET_APPROVAL_MISMATCH`; non-`APPROVED`
+  review states never authorize and leave `human_approved: false`.
 
 After the event projection verifies, `authenticated_reviewer_identity` must
 equal the attestation reviewer identity, the event disposition/state must equal
