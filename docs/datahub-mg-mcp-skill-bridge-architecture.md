@@ -279,11 +279,26 @@ records carry the attestation digest separately from the approval payload
 digest. The outer `approval` mirror must equal the verified nested
 `approval_attestation` field-for-field for `approved_content_digest`,
 `approved_packet_digest`, `approval_snapshot_digest`, `human_approved`,
-`reviewer_identity`, `approved_at`, `disposition`, `approved_head_sha`, and
-`approval_attestation_digest`; the nested `packet_record_id` and `request_id`
-must resolve to the same approved packet and request as the outer binding. A
-change to any outer mirror without a corresponding attestation update is
-`PACKET_APPROVAL_MISMATCH`.
+`reviewer_identity`, `approved_at`, `disposition`, `approved_head_sha`,
+`approval_attestation_digest`, and `approval_event_binding`; the nested
+`packet_record_id` and `request_id` must resolve to the same approved packet
+and request as the outer binding. A change to any outer mirror without a
+corresponding attestation update is `PACKET_APPROVAL_MISMATCH`.
+
+A locally produced hash of the reviewer fields is integrity-only evidence; it
+does not establish human approval authenticity. The attestation is authoritative
+only when it also carries an `approval_event_binding` that resolves reviewer-
+authenticated evidence through the existing `external_exact` pattern. The event
+binding must be bound to the trusted source system, repository and pull request
+identity, immutable event locator, source review or approval-event ID,
+authenticated reviewer identity, reviewer-authority validation, disposition,
+approved packet record ID, approved packet digest, approval snapshot digest,
+approved head SHA, approval timestamp, expected source-event digest, exact
+resolution validation, and authentication validation. Missing or unresolved
+event evidence is `PROOF_INCOMPLETE`; a malformed or non-verifying event digest
+is `DIGEST_INVALID`; an unauthorized reviewer or unauthenticated event is
+`APPROVAL_INVALID`; and authenticated evidence bound to the wrong packet,
+scope, snapshot, or head is `PACKET_APPROVAL_MISMATCH`.
 
 An exact payload-byte digest is a separate domain. `payload_digest` is the
 SHA-256 hash of the exact bytes read from the declared artifact path, and
@@ -458,6 +473,7 @@ approval:
   approved_content_digest: null
   approval_snapshot_digest: null
   approval_attestation_digest: null
+  approval_event_binding: null
   approval_attestation:
     schema_name: governed_packet_approval_attestation
     schema_version: "1.0"
@@ -474,6 +490,26 @@ approval:
     disposition: null
     approved_head_sha: null
     approval_attestation_digest: null
+    approval_event_binding:
+      mode: external_exact
+      trusted_source_system: GitHub
+      repository_owner: <owner>
+      repository_name: <repo>
+      pull_request_number: <pr-number>
+      source_class: github_pull_request_review
+      source_id: <source-review-or-approval-event-id>
+      immutable_locator: <immutable-event-locator>
+      authenticated_reviewer_identity: null
+      reviewer_authority_validation: pass|fail
+      disposition: null
+      approved_packet_record_id: <packet-stable-id>
+      approved_packet_digest: null
+      approval_snapshot_digest: null
+      approved_head_sha: null
+      approval_timestamp: null
+      expected_source_event_digest: sha256:<64-lowercase-hex>
+      exact_resolution_validation: pass|fail
+      authentication_validation: pass|fail
   validation: pass|fail
 ```
 
@@ -1122,6 +1158,7 @@ approval:
   approved_content_digest: null
   approval_snapshot_digest: null
   approval_attestation_digest: null
+  approval_event_binding: null
   approval_attestation:
     schema_name: governed_packet_approval_attestation
     schema_version: "1.0"
@@ -1138,6 +1175,26 @@ approval:
     disposition: null
     approved_head_sha: null
     approval_attestation_digest: null
+    approval_event_binding:
+      mode: external_exact
+      trusted_source_system: GitHub
+      repository_owner: <owner>
+      repository_name: <repo>
+      pull_request_number: <pr-number>
+      source_class: github_pull_request_review
+      source_id: <source-review-or-approval-event-id>
+      immutable_locator: <immutable-event-locator>
+      authenticated_reviewer_identity: null
+      reviewer_authority_validation: pass|fail
+      disposition: null
+      approved_packet_record_id: <packet-stable-id>
+      approved_packet_digest: null
+      approval_snapshot_digest: null
+      approved_head_sha: null
+      approval_timestamp: null
+      expected_source_event_digest: sha256:<64-lowercase-hex>
+      exact_resolution_validation: pass|fail
+      authentication_validation: pass|fail
   approved_packet_record_id: null
   terminal_packet_record_id: null
   lineage_authorization_validation: pass|fail
@@ -1248,6 +1305,23 @@ is invalid. The approved revision's wrapper may use the sentinel
 `self` only to identify the authorization source.
 Only packet schema `1.1` assigns this carry-forward meaning. The context schema
 remains `1.0`, and the proof schema remains `1.1`.
+
+An executing or validated successor must also carry an
+`authorized_scope_projection` inside `authorization_binding`. The projection
+must equal the resolved approved revision's authorized scope field-for-field
+before authorization carry-forward can pass. It includes objective,
+source_mode, source_mode_policy, context record and digest, pre-retrieval
+manifest binding, repository owner, name, base commit, branch, identity, path,
+root, common directory, readable paths, writable paths, DataHub facts relied
+on, MG MCP records relied on, authorized tools, denied tools, allowed commands,
+required artifacts, validation requirements, stop_condition, expires_at, and
+screening. Only successor-specific record identity, timestamps, status,
+execution_status, supersedes, terminal worktree head, failures, and result
+evidence may differ. Writable-path expansion, tool expansion, command
+expansion, artifact substitution, validation weakening, stop-condition
+weakening, or expiry extension invalidates carry-forward; a scope mismatch is
+`PACKET_APPROVAL_MISMATCH` and fails both `authorization_carry_forward_validation`
+and `lineage_authorization_validation`.
 
 `governed_development_proof` `1.1` is a minor, field-definition-compatible
 extension, not a major schema version. It preserves the meaning and
@@ -1527,23 +1601,43 @@ conforming `1.1` successor creation does not. Packet schema `1.0` instead
 invalidates approval on every successor creation and requires reapproval.
 `proof.approval.approved_packet_record_id`, `approval_snapshot_digest`,
 `approved_packet_digest`, `approved_content_digest`,
-`approval_attestation_digest`, `approved_head_sha`, and
+`approval_attestation_digest`, `approved_head_sha`,
+`approval_event_binding`, and
 `terminal_packet_record_id` capture this binding. The packet and proof
 approval bindings must each carry the same `approval_snapshot_digest`,
 `approved_packet_digest`, `approved_content_digest`,
-`approval_attestation_digest`, and `approved_head_sha`.
+`approval_attestation_digest`, `approved_head_sha`, and
+`approval_event_binding`.
 `lineage_authorization_validation` is `pass` only when the terminal wrapper's
 authorization source matches the proof's approval fields. For an `executing`
 or `validated` successor, the terminal wrapper's structured
-`authorization_binding` digests must match those fields. For the approved
-revision itself, the wrapper sentinel `authorization_binding: self` resolves
-to that revision's own `record_id`, immutable `approval_snapshot_digest`,
-verified `approval_digest_payload` digest, approved `approved_packet_digest`,
-approved `approved_content_digest`, approved `approval_attestation_digest`,
-approved `approved_head_sha`, and `content_digest`. The `self` form is valid on
-the approved revision whether or not that revision is terminal or has
-conforming successors. No resolved packet field or packet content digest is
-used to carry or verify authorization binding.
+`authorization_binding` digests must match those fields and its
+`authorized_scope_projection` must match the resolved approved revision's
+authorized scope field-for-field. For the approved revision itself, the
+wrapper sentinel `authorization_binding: self` resolves to that revision's own
+`record_id`, immutable `approval_snapshot_digest`, verified
+`approval_digest_payload` digest, approved `approved_packet_digest`, approved
+`approved_content_digest`, approved `approval_attestation_digest`, approved
+`approved_head_sha`, `approval_event_binding`, and `content_digest`. The `self`
+form is valid on the approved revision whether or not that revision is terminal
+or has conforming successors. No resolved packet field or packet content
+digest is used to carry or verify authorization binding.
+
+The exact authorization-scope projection bound into an executing or validated
+successor must contain `objective`, `source_mode`, `source_mode_policy`,
+`context_record_id`, `context_content_digest`, `pre_retrieval_manifest_digest`,
+`repository.owner`, `repository.name`, `repository.base_commit`,
+`repository.branch`, `repository.worktree.identity`, `repository.worktree.path`,
+`repository.worktree.repository_root`, `repository.worktree.common_dir`,
+`repository.readable_paths`, `repository.writable_paths`, `datahub_facts_relied_on`,
+`mg_mcp_records_relied_on`, `authorized_tools`, `denied_tools`, `allowed_commands`,
+`required_artifacts`, `validation`, `stop_condition`, `expires_at`, and
+`screening`. The only fields permitted to differ from the resolved approved
+revision are the successor's own record identity, timestamps, `status`,
+`execution_status`, `supersedes`, terminal worktree head, failures, and result
+evidence. Any writable-path expansion, tool expansion, command expansion,
+artifact substitution, validation weakening, stop-condition weakening, or
+expiry extension invalidates carry-forward and returns `PACKET_APPROVAL_MISMATCH`.
 
 Normative approval-revision validation is conditional on the selected lineage
 profile reaching approval. For the successful profile and the
@@ -1692,16 +1786,18 @@ The deterministic validation cases for this extension are:
 5. Changing one payload byte, byte length, media-bound canonical field, JCS
   serialization, digest case, or digest value returns `DIGEST_INVALID`.
 6. A missing required approval binding, `approval_attestation_digest`,
-  `approved_packet_digest`, or `approval_snapshot_digest` returns
-  `PROOF_INCOMPLETE`.
-7. Changing approval-attestation bytes or approval-payload bytes without
-  recomputing the declared digest, supplying a malformed
-  `approval_attestation_digest`, `approved_packet_digest`, or
-  `approval_snapshot_digest`, or supplying any of those digests that does not
-  verify returns `DIGEST_INVALID`.
-8. Only after the attestation and approval digests verify, binding them to the
-  wrong approved record, approved content digest, approval snapshot digest, or
-  resolved approved revision head returns `PACKET_APPROVAL_MISMATCH`.
+  `approval_event_binding`, `approved_packet_digest`, or
+  `approval_snapshot_digest` returns `PROOF_INCOMPLETE`.
+7. Changing approval-attestation bytes, approval-event bytes, or
+  approval-payload bytes without recomputing the declared digest, supplying a
+  malformed `approval_attestation_digest`,
+  `approval_event_binding.expected_source_event_digest`,
+  `approved_packet_digest`, or `approval_snapshot_digest`, or supplying any of
+  those digests that does not verify returns `DIGEST_INVALID`.
+8. Only after the attestation, event, and approval digests verify, binding
+  them to the wrong approved record, approval scope projection, approved
+  content digest, approval snapshot digest, or resolved approved revision head
+  returns `PACKET_APPROVAL_MISMATCH`.
 9. Presenting a `1.1` proof to a consumer that supports only `1.0` returns
   `SCHEMA_UNSUPPORTED`; no silent field dropping or downgrade is permitted.
 10. Empty `artifact_evidence` passes only with an empty
@@ -1713,26 +1809,33 @@ The deterministic validation cases for this extension are:
   `skipped_existing` record, preserve the verified baseline bytes and digest,
   keep the baseline and terminal byte lengths equal, keep `base_payload_digest`
   equal to `result_payload_digest`, and record the attributable terminal cause.
-  A validated proof or a record for bytes that exist may not use
-  `not_produced` or `skipped_existing`. A required artifact without either
-  truthful form of evidence, an invalid presence/role/outcome/provenance
-  combination, a noncanonical collection order, an unresolved declared graph
-  identity, or a graph node unreachable from the root returns
-  `PROOF_INCOMPLETE`.
+  A validated proof may not use `not_produced` or `skipped_existing`; a record
+  for bytes that exist may not use `not_produced`; unchanged existing bytes in
+  nonvalidated terminal profiles may use `skipped_existing`. A required
+  artifact without either truthful form of evidence, an invalid presence/role/
+  outcome/provenance combination, a noncanonical collection order, an
+  unresolved declared graph identity, or a graph node unreachable from the
+  root returns `PROOF_INCOMPLETE`.
 11. A pending `terminal_proposed_initial` or `terminal_proposed_refined`
   profile passes with `execution_status: not_started` and may mix `present`
   evidence with `not_produced` evidence whose reason is `pending`; if a
   required generated or modified artifact already exists at
   `pre_execution_baseline_head_sha`, it may use `skipped_existing` truthfully
   before execution begins. A validated proof with any `not_produced` evidence
-  returns `PROOF_INCOMPLETE`.
+  returns `PROOF_INCOMPLETE`. A validated proof with any `skipped_existing`
+  evidence also returns `PROOF_INCOMPLETE`.
 12. `execution_start_head_sha` is profile-conditional: it is null for
   `terminal_proposed_initial`, `terminal_proposed_refined`, and
   `terminal_approved` when execution never began, and required for
   `terminal_executing` and successful `terminal_validated` where it resolves
   from immutable execution-start lineage evidence. `pre_execution_baseline_head_sha`
   is the distinct baseline binding for truthful unchanged-existing evidence
-  before execution begins.
+  before execution begins. The lifecycle-applicable baseline field is
+  `pre_execution_baseline_head_sha` before execution begins and
+  `execution_start_head_sha` after execution starts. A mismatch against the
+  wrong lifecycle field returns `PROOF_INCOMPLETE` unless the underlying
+  repository object lookup itself fails, in which case `WORKTREE_INVALID`
+  remains the only allowed repository-object failure.
 13. Every required evidence carrier and every resolved packet revision passes
   only when its explicit `request_id` equals `proof.request_id`; an omitted or
   mismatched request ID returns `PROOF_INCOMPLETE`.
@@ -1750,15 +1853,15 @@ The deterministic validation cases for this extension are:
   modified. Missing required provenance fields, an invalid whole-field branch,
   an invalid prior-state combination, a failed validation result, or a base-
   head, terminal-head, or artifact-path binding that differs from the proof-
-  bound repository evidence or the immutable execution-start head, or the
-  pre-execution baseline head when execution has not begun, returns
-  `PROOF_INCOMPLETE`. A supplied `base_payload_digest`, `result_payload_digest`,
-  or `diff_digest` that is malformed or does not verify returns
-  `DIGEST_INVALID`. `not_produced` or `validation_output` evidence containing a
-  provenance object returns `PROOF_INCOMPLETE`. Generated evidence proves the
-  artifact path is absent from the Git tree at `base_head_sha` and uses
-  `base_payload_digest: null`. Produced generated evidence must prove the
-  artifact path is absent from the Git tree at `base_head_sha`. Produced
+  bound repository evidence or the lifecycle-applicable baseline field returns
+  `PROOF_INCOMPLETE`. Before execution begins, the lifecycle-applicable
+  baseline field is `pre_execution_baseline_head_sha`; after execution starts,
+  it is `execution_start_head_sha`. A supplied `base_payload_digest`,
+  `result_payload_digest`, or `diff_digest` that is malformed or does not
+  verify returns `DIGEST_INVALID`. `not_produced` or `validation_output`
+  evidence containing a provenance object returns `PROOF_INCOMPLETE`.
+  Produced generated evidence proves the artifact path is absent from the Git
+  tree at `base_head_sha` and uses `base_payload_digest: null`. Produced
   modified evidence proves the artifact path exists at `base_head_sha`, uses
   the lowercase SHA-256 of the exact `<base_head_sha>:<artifact_path>` blob
   bytes as its verified `base_payload_digest`, and requires a changed-path or
@@ -1981,7 +2084,8 @@ is deterministic and uses the first matching condition in this order:
 
 - **Approval:** use `APPROVAL_REQUIRED`, `APPROVAL_INVALID`, or
   `APPROVAL_HEAD_MISMATCH` when affirmative approval, reviewer identity,
-  timestamp, disposition, or exact head binding is absent or invalid.
+  timestamp, disposition, exact head binding, or reviewer-authenticated event
+  evidence is absent or invalid.
 - **Packet approval:** use `PACKET_APPROVAL_MISMATCH` only when well-formed,
   cryptographically verified approval evidence is bound to the wrong approved
   record, approved content digest, approval snapshot digest, or approved head. A malformed or
