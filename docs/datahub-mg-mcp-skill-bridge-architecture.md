@@ -259,8 +259,9 @@ digest and is computed from the immutable snapshot payload below. Approval is
 a post-packet-digest attestation object. Approval carry-forward fields are not
 recursive digest inputs to the digest that names them: `approved_packet_digest`
 is derived from `approval_digest_payload`, `approval_snapshot_digest` is
-derived from `approval_snapshot_payload`, and `approved_content_digest` is
-copied from the approved revision's final `content_digest`. The
+derived from `approval_snapshot_payload`, and `approved_content_digest` is the
+reviewer-authenticated approved-revision digest verified against the resolved
+approved revision's final `content_digest`. The
 packet-revision-lineage and proof-evidence-graph carriers use the same
 canonical-record domain as an artifact-evidence record, omitting only their
 own `canonical_record_digest`.
@@ -273,7 +274,8 @@ inputs to the digest that names them: `approval_attestation_digest` is derived
 from the complete `approval_attestation` object with only its own
 `approval_attestation_digest` field omitted, `approved_packet_digest` is derived from
 `approval_digest_payload`, `approval_snapshot_digest` is derived from
-`approval_snapshot_payload`, and `approved_content_digest` is copied from the
+`approval_snapshot_payload`, and `approved_content_digest` is extracted from
+the immutable reviewer-authenticated event claim set and verified against the
 approved revision's final `content_digest`. The packet and proof approval
 records carry the attestation digest separately from the approval payload
 digest. The outer `approval` mirror must equal the verified nested
@@ -296,9 +298,18 @@ transport metadata, implementation-dependent field ordering, or the
 `expected_source_event_digest` field itself. The event projection records the
 GitHub source identity, repository and PR identity, immutable review/event ID
 and locator, authenticated reviewer identity, state, disposition, submitted
-timestamp, reviewed commit SHA, and the packet, snapshot, and head claims
-authenticated by the event. Those claims are the immutable reviewer-authenticated
-inputs; producer-copied sibling values are not evidence.
+timestamp, the reviewed commit SHA natively attached to the trusted review,
+and the packet record, packet digest, snapshot digest, approved head, and
+approved content digest supplied by the same existing immutable reviewer-
+authenticated custom claim set. Source-event resolution must extract those
+custom claims from that immutable claim set without selecting a new carrier or
+encoding. The packet or proof producer must not select, infer, recompute, copy
+from sibling mirrors, overwrite, or rewrite any event claim. A missing or
+unresolved required custom claim fails closed as `PROOF_INCOMPLETE`; producer-
+copied sibling values are not evidence. Every field in the complete nested
+`event_projection`, including `reviewed_commit_sha`, `approved_content_digest`,
+and `approved_head_sha`, remains inside the `github_approval_event` RFC 8785 JCS
+SHA-256 digest target and is not among its exclusions.
 
 After the event projection verifies, `authenticated_reviewer_identity` must
 equal the attestation reviewer identity, the event disposition/state must equal
@@ -307,19 +318,31 @@ attestation `approved_at` value, the event packet record ID must equal the
 attestation `packet_record_id`, the event packet digest must equal the
 attestation `approved_packet_digest`, the event snapshot digest must equal the
 attestation `approval_snapshot_digest`, the event approved head must equal the
-attestation `approved_head_sha`, and the repository and pull request identity
-must equal the declared approval source. `human_approved` is true if and only
-if the event state is `APPROVED`, reviewer authority validation passes, exact
-resolution validation passes, authentication validation passes, and the event
-projection claims match the attestation and outer approval for reviewer
-identity, timestamp, disposition/state, packet record ID, packet digest,
-snapshot digest, approved head, repository, and PR identity. `COMMENTED`,
-`CHANGES_REQUESTED`, `DISMISSED`, `PENDING`, missing, unknown, unauthorized, or
-unauthenticated events must not authorize execution. Missing or unresolved
+attestation `approved_head_sha`, the event approved content digest must equal
+the attestation `approved_content_digest`, and the repository and pull request
+identity must equal the declared approval source. The packet outer event
+binding, packet nested attestation event binding, proof outer event binding,
+and proof nested attestation event binding must be structurally identical for
+all immutable carrier and projection fields.
+
+`human_approved` is true if and only if the event state is `APPROVED`, reviewer
+authority validation passes, exact resolution validation passes,
+authentication validation passes, all other event projection claims match the
+attestation and outer approval, and both complete equality chains pass:
+`event_projection.reviewed_commit_sha = event_projection.approved_head_sha =
+approval_attestation.approved_head_sha = outer approval.approved_head_sha =
+resolved approved revision.repository.worktree.head_sha` and
+`event_projection.approved_content_digest =
+approval_attestation.approved_content_digest = outer
+approval.approved_content_digest = resolved approved
+revision.content_digest`. `COMMENTED`, `CHANGES_REQUESTED`, `DISMISSED`,
+`PENDING`, missing, unknown, unauthorized, unresolved, unauthenticated,
+wrong-head, or wrong-content events must not authorize execution. Missing or unresolved
 event evidence is `PROOF_INCOMPLETE`; a malformed or non-verifying event digest
 is `DIGEST_INVALID`; an unauthorized reviewer or unauthenticated event is
 `APPROVAL_INVALID`; and authenticated evidence bound to the wrong packet,
-scope, snapshot, digest, or head is `PACKET_APPROVAL_MISMATCH`.
+scope, snapshot, digest, head, or approved content is
+`PACKET_APPROVAL_MISMATCH`.
 
 An exact payload-byte digest is a separate domain. `payload_digest` is the
 SHA-256 hash of the exact bytes read from the declared artifact path, and
@@ -524,6 +547,7 @@ approval:
       approved_packet_record_id: <packet-stable-id>
       approved_packet_digest: null
       approval_snapshot_digest: null
+      approved_content_digest: null
       approved_head_sha: null
     reviewer_authority_validation: pass|fail
     exact_resolution_validation: pass|fail
@@ -575,6 +599,7 @@ approval:
         approved_packet_record_id: <packet-stable-id>
         approved_packet_digest: null
         approval_snapshot_digest: null
+        approved_content_digest: null
         approved_head_sha: null
       reviewer_authority_validation: pass|fail
       exact_resolution_validation: pass|fail
@@ -594,9 +619,17 @@ the resolved approved revision rather than the successor terminal head. A
 missing, stale, or mismatched approval blocks execution. `human_approved` is
 true if and only if event state is `APPROVED`, reviewer authority validation
 passes, exact resolution validation passes, authentication validation passes,
-and the event projection claims match the attestation and outer approval for
-reviewer identity, timestamp, disposition/state, packet record ID, packet
-digest, snapshot digest, approved head, repository, and PR identity.
+all other event projection claims match the attestation and outer approval,
+and both complete equality chains pass:
+`event_projection.reviewed_commit_sha = event_projection.approved_head_sha =
+approval_attestation.approved_head_sha = outer approval.approved_head_sha =
+resolved approved revision.repository.worktree.head_sha` and
+`event_projection.approved_content_digest =
+approval_attestation.approved_content_digest = outer
+approval.approved_content_digest = resolved approved
+revision.content_digest`. Every non-`APPROVED`, unauthorized, unresolved,
+unauthenticated, wrong-head, or wrong-content event makes `human_approved`
+false.
 
 `approval_digest_payload` is the immutable pre-approval payload. It is the exact
 object shown in the packet schema, with `packet_record_id` equal to the packet
@@ -711,11 +744,16 @@ and no approval binding may require the final packet `content_digest` as an
 input.
 
 `approved_content_digest` records the approved revision's final `content_digest`
-at approval time. The packet and proof approval bindings must each carry the
-same `approved_packet_digest` approval-payload digest, the same
-`approval_snapshot_digest` immutable snapshot digest, and the same
-`approved_content_digest` approved-revision snapshot mirror. A mutation to the
-approved revision or its approval payload invalidates approval:
+at approval time only when the immutable reviewer-authenticated event claim,
+the verified attestation, the outer approval, and the independently resolved
+approved revision all agree. The packet and proof approval bindings must each
+carry the same `approved_packet_digest` approval-payload digest, the same
+`approval_snapshot_digest` immutable snapshot digest, and the same event-bound
+`approved_content_digest`. A mutation to the event projection without source-
+event digest recomputation is `DIGEST_INVALID`; a cryptographically verified
+and authenticated event bound to a different approved content digest or head
+is `PACKET_APPROVAL_MISMATCH`. A mutation to the approved revision or its
+approval payload invalidates approval:
 `human_approved` becomes false, approval identity, timestamp, disposition,
 approved head, approved packet digest, approval snapshot digest, and approved
 content digest are cleared,
@@ -1327,6 +1365,7 @@ approval:
       approved_packet_record_id: <packet-stable-id>
       approved_packet_digest: null
       approval_snapshot_digest: null
+      approved_content_digest: null
       approved_head_sha: null
     reviewer_authority_validation: pass|fail
     exact_resolution_validation: pass|fail
@@ -1378,6 +1417,7 @@ approval:
         approved_packet_record_id: <packet-stable-id>
         approved_packet_digest: null
         approval_snapshot_digest: null
+        approved_content_digest: null
         approved_head_sha: null
       reviewer_authority_validation: pass|fail
       exact_resolution_validation: pass|fail
@@ -1801,6 +1841,12 @@ approval bindings must each carry the same `approval_snapshot_digest`,
 `approved_packet_digest`, `approved_content_digest`,
 `approval_attestation_digest`, `approved_head_sha`, and
 `approval_event_binding`.
+The packet outer approval event binding, packet nested attestation event
+binding, proof outer approval event binding, and proof nested attestation event
+binding must be structurally identical. Their authenticated event projections
+must satisfy the exact reviewed-commit/head and approved-content equality
+chains against the independently resolved approved revision before
+`lineage_authorization_validation` can pass.
 `lineage_authorization_validation` is `pass` only when the terminal wrapper's
 authorization source matches the proof's approval fields. For an `executing`
 or `validated` successor, the terminal wrapper's structured
@@ -1849,6 +1895,16 @@ payload only, and compares it with
 `terminal_proposed_refined`, the verifier must not resolve or require an
 approved revision or approval digests; those approval fields remain null and
 their absence is not `PROOF_INCOMPLETE`.
+For every profile that reaches approval, the verifier also requires
+`event_projection.reviewed_commit_sha = event_projection.approved_head_sha =
+approval_attestation.approved_head_sha = proof.approval.approved_head_sha =
+resolved approved revision.repository.worktree.head_sha` and
+`event_projection.approved_content_digest =
+approval_attestation.approved_content_digest =
+proof.approval.approved_content_digest = resolved approved
+revision.content_digest`. The corresponding packet outer and nested bindings
+must be structurally identical to the proof representations and carry the same
+verified values.
 The verifier must not hash the complete approved revision record, the terminal
 packet's payload, or the record identified by `packet_binding.record_id`.
 Separately, the verifier resolves
@@ -1859,8 +1915,8 @@ Separately, the verifier resolves
 
 Approval-validation failure precedence is deterministic: a missing or
 unresolved required binding or digest returns `PROOF_INCOMPLETE`; a present
-malformed or non-verifying digest, including changed payload bytes without a
-recomputed digest, returns `DIGEST_INVALID`; only well-formed,
+malformed or non-verifying digest, including changed event-projection or
+payload bytes without a recomputed digest, returns `DIGEST_INVALID`; only well-formed,
 cryptographically verified evidence bound to the wrong approved record,
 approved content digest, approval snapshot digest, or approved head returns
 `PACKET_APPROVAL_MISMATCH`.
@@ -1980,11 +2036,13 @@ The deterministic validation cases for this extension are:
   serialization, digest case, or digest value returns `DIGEST_INVALID`.
 6. A missing required approval binding, `approval_attestation_digest`,
   `approval_event_binding`, `approved_packet_digest`, or
-  `approval_snapshot_digest` returns `PROOF_INCOMPLETE`. The packet approval
-  schema, proof approval schema, and approval attestation
-  `approval_event_binding` must be structurally identical in the fields used to
-  describe the immutable event carrier and event projection; any field mismatch
-  among those three representations returns `PROOF_INCOMPLETE`.
+  `approval_snapshot_digest`, or a required `approved_content_digest` event
+  claim returns `PROOF_INCOMPLETE`. The packet outer approval, packet nested
+  attestation, proof outer approval, and proof nested attestation
+  `approval_event_binding` representations must all include
+  `approved_content_digest` and be structurally identical in the fields used to
+  describe the immutable event carrier and event projection; any omission or
+  mismatch among those four representations returns `PROOF_INCOMPLETE`.
 7. Changing approval-attestation bytes, approval-event projection bytes, or
   approval-payload bytes without recomputing the declared digest, supplying a
   malformed `approval_attestation_digest`,
@@ -1992,15 +2050,23 @@ The deterministic validation cases for this extension are:
   `approved_packet_digest`, or `approval_snapshot_digest`, or supplying any of
   those digests that does not verify returns `DIGEST_INVALID`. Equivalent API
   transport formatting that resolves to the same event projection must produce
-  the same digest; any content change to the event projection without digest
+  the same RFC 8785 JCS SHA-256 digest regardless of event-projection key order;
+  any mutation of `reviewed_commit_sha`, `approved_head_sha`,
+  `approved_content_digest`, or other event-projection content without digest
   recomputation returns `DIGEST_INVALID`.
 8. Only after the attestation, event, and approval digests verify, binding
   them to the wrong approved record, approval scope projection, approved
   content digest, approval snapshot digest, or resolved approved revision head
-  returns `PACKET_APPROVAL_MISMATCH`. Reviewer identity, timestamp,
-  disposition/state, packet record ID, packet digest, snapshot digest, approved
-  head, repository, and PR identity must all match across the event projection,
-  attestation, and outer approval.
+  returns `PACKET_APPROVAL_MISMATCH`. The exact head chain is
+  `event_projection.reviewed_commit_sha = event_projection.approved_head_sha =
+  approval_attestation.approved_head_sha = outer approval.approved_head_sha =
+  resolved approved revision.repository.worktree.head_sha`; the exact content
+  chain is `event_projection.approved_content_digest =
+  approval_attestation.approved_content_digest = outer
+  approval.approved_content_digest = resolved approved
+  revision.content_digest`. Reviewer identity, timestamp, disposition/state,
+  packet record ID, packet digest, snapshot digest, repository, and PR identity
+  must also match across the event projection, attestation, and outer approval.
 9. Presenting a `1.1` proof to a consumer that supports only `1.0` returns
   `SCHEMA_UNSUPPORTED`; no silent field dropping or downgrade is permitted.
 10. Empty `artifact_evidence` passes only with an empty
@@ -2101,8 +2167,16 @@ The proof `context_budget.limits` must equal the packet
 `approved_head_sha`, `approved_packet_digest`, `approved_content_digest`, and
 `approval_snapshot_digest`, `approval_attestation_digest`, and
 `approval_attestation`. When the selected lineage profile reaches
-approval, `approval.approved_head_sha` must equal the resolved approved
-revision's `repository.worktree.head_sha`. For `terminal_proposed_initial` and
+approval, the packet outer binding, packet nested attestation binding, proof
+outer binding, and proof nested attestation binding must be structurally
+identical, and proof acceptance requires
+`event_projection.reviewed_commit_sha = event_projection.approved_head_sha =
+approval_attestation.approved_head_sha = approval.approved_head_sha = resolved
+approved revision.repository.worktree.head_sha` and
+`event_projection.approved_content_digest =
+approval_attestation.approved_content_digest =
+approval.approved_content_digest = resolved approved revision.content_digest`.
+For `terminal_proposed_initial` and
 `terminal_proposed_refined`, `approval.approved_head_sha` remains null and this
 comparison is not performed. For a profile that reaches approval,
 `approval.approved_packet_digest` must equal the RFC 8785 JCS SHA-256 digest
@@ -2115,11 +2189,12 @@ must equal the RFC 8785 JCS SHA-256 digest computed over the deterministic
 `approval_snapshot_payload` projection derived from the resolved approved
 revision and its `approval_digest_payload`, where the revision is resolved from
 `proof.approval.approved_packet_record_id`. `approval.approved_content_digest`
-must equal the resolved approved revision's final `content_digest` captured at
-approval time and is checked only after the packet digest and snapshot digest
-have been established. A missing or unresolved required binding or digest fails
+must equal the event claim, attestation, packet approval, and resolved approved
+revision's final `content_digest` captured at approval time and is checked only
+after the packet, snapshot, event, and attestation digests and event
+authentication have been established. A missing or unresolved required binding or digest fails
 with `PROOF_INCOMPLETE`; a present malformed or non-verifying digest, including
-changed payload bytes without recomputation, fails with `DIGEST_INVALID`; only
+changed event-projection or payload bytes without recomputation, fails with `DIGEST_INVALID`; only
 verified evidence bound to the wrong approved record, approval snapshot digest,
 approved content digest, or approved head fails with `PACKET_APPROVAL_MISMATCH`.
 The proof-only fields
@@ -2276,7 +2351,7 @@ is deterministic and uses the first matching condition in this order:
 | Condition | Failure code |
 | --- | --- |
 | A required approval binding or digest is missing or unresolved | `PROOF_INCOMPLETE` |
-| A supplied approval digest is malformed or does not verify, including changed payload bytes without recomputation | `DIGEST_INVALID` |
+| A supplied approval digest is malformed or does not verify, including changed event-projection or payload bytes without recomputation | `DIGEST_INVALID` |
 | Well-formed and cryptographically verified approval evidence is bound to the wrong approved record, approved content digest, approval snapshot digest, or approved head | `PACKET_APPROVAL_MISMATCH` |
 | A required canonical-record or payload-byte digest field is missing | `PROOF_INCOMPLETE` |
 | A supplied canonical-record or payload-byte digest, or byte length, is malformed or does not verify | `DIGEST_INVALID` |
@@ -2292,7 +2367,7 @@ is deterministic and uses the first matching condition in this order:
 - **Packet approval:** use `PACKET_APPROVAL_MISMATCH` only when well-formed,
   cryptographically verified approval evidence is bound to the wrong approved
   record, approved content digest, approval snapshot digest, or approved head. A malformed or
-  non-verifying approval digest, including changed payload bytes without
+  non-verifying approval digest, including changed event-projection or payload bytes without
   recomputation, is `DIGEST_INVALID`; a missing or unresolved required approval
   binding or digest is `PROOF_INCOMPLETE`.
 - **Budget:** use `BUDGET_EXCEEDED` when any declared entity, lineage depth,
