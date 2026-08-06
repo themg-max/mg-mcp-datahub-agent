@@ -120,6 +120,38 @@
         "docs/datahub-mg-mcp-skill-bridge-architecture.md"
       ],
       "note": "Controlling-schema lane for Issue #17. Defines schema-valid immutable artifact evidence, payload-byte evidence, complete packet-lineage evidence, external-record digest binding, compatibility, and fail-closed behavior. PR #16 and Issue #14 remain blocked until this lane is reviewed and merged. Runtime implementation, fixtures, examples, dependencies, workflows, hooks, deployment, IAM, credentials, private or production data, DataHub writes, MG MCP writes, and autonomous merge remain blocked."
+    },
+    {
+      "id": "datahub-official-mcp-readonly-integration-v1",
+      "status": "APPROVED",
+      "durable_branch": "feat/datahub-official-mcp-readonly-integration-v1",
+      "owner": "themg-max",
+      "issue": 23,
+      "artifact": "docs/datahub-mcp-readonly-demo.md",
+      "allowed_paths": [
+        "src/datahub/mcp-client.ts",
+        "src/datahub/context-adapter.ts",
+        "src/cli.ts",
+        "tests/datahub-mcp-readonly.test.ts",
+        "fixtures/datahub-mcp-readonly-response.json",
+        "examples/generated-work-packet/datahub-mcp-readonly-work-packet.json",
+        "examples/official-mcp-proof/read-only-retrieval-summary.json",
+        "docs/datahub-mcp-readonly-demo.md",
+        "README.md"
+      ],
+      "note": "Recorded-response official MCP read-only contract harness for Issue #23. Live official MCP server validation is NOT authorized in this lane; successor lane datahub-official-mcp-live-readonly-validation-v1 is required for one live tools/list + one approved read. No DataHub writes, credentials, deployment, IAM, or MG MCP resolver changes."
+    },
+    {
+      "id": "datahub-official-mcp-live-readonly-validation-v1",
+      "status": "PROPOSED",
+      "durable_branch": "feat/datahub-official-mcp-live-readonly-validation-v1",
+      "owner": "themg-max",
+      "issue": 23,
+      "artifact": "examples/official-mcp-proof/live-readonly-validation-summary.json",
+      "allowed_paths": [
+        ".ai/active-lanes/datahub-devpost.json"
+      ],
+      "note": "PROPOSED successor lane only. Registry-intake may later expand allowed_paths after human approval. Purpose: one official live DataHub MCP tools/list + one approved read-only call with connection/tool identity proof. Blocked: writes, credentials in repo, deploy, IAM, production data, MG MCP resolver mutation."
     }
   ]
 }
