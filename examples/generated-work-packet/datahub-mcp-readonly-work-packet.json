@@ -1,0 +1,113 @@
+{
+  "allowed_actions": [
+    "inspect_recorded_mcp_readonly_response",
+    "normalize_context_record",
+    "generate_work_packet",
+    "emit_local_proof_summary"
+  ],
+  "authority": {
+    "consumer_eligibility": "PROPOSED",
+    "record_status": "FIXTURE",
+    "runtime_retrieval_status": "UNKNOWN",
+    "source_binding_status": "LOCALLY_MATERIALIZED"
+  },
+  "blocked_actions": [
+    "datahub_write",
+    "mg_mcp_write",
+    "live_network_mcp_without_authorization",
+    "production_credentials",
+    "deployment",
+    "iam_mutation",
+    "oauth_bootstrap",
+    "secret_materialization",
+    "autonomous_github_mutation",
+    "resolver_changes"
+  ],
+  "derivation_policy_version": "datahub-mcp-readonly-derivation/v1",
+  "digests": {
+    "content_digest": "e17ed7e1915cfe2791db558d86630faef3f48d1d1f3fcd3a998cb080f45f0589",
+    "normalized_record_digest": "77c9ec785a65fce502a2944d0a5ffb18de9c35c3ab4e281efb168933c752471e",
+    "packet_content_digest": "d62b055c5d85e9ef9f4400543a46c9ea1f63ad060a3f4108c8769c4fbac60c24"
+  },
+  "human_approval_required": true,
+  "normalized_context": {
+    "dataset_urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,financial.transactions.ledger_v2,PROD)",
+    "description": "Immutable ledger of financial transactions used for regulated reporting exercises.",
+    "name": "ledger_v2",
+    "ownership": {
+      "data_governance_owner": "compliance-team",
+      "owner_team": "data-platform-finance",
+      "sla_contact": "oncall-finance"
+    },
+    "platform": "postgres",
+    "quality_assertion_types": [
+      "completeness",
+      "timeliness",
+      "uniqueness"
+    ],
+    "required_field_names": [
+      "transaction_id",
+      "timestamp_utc",
+      "amount_usd",
+      "actor_principal"
+    ],
+    "schema_field_names": [
+      "transaction_id",
+      "timestamp_utc",
+      "amount_usd",
+      "actor_principal"
+    ],
+    "sensitivity": "PII_RESTRICTED",
+    "upstream_dataset_urns": [
+      "urn:li:dataset:(urn:li:dataPlatform:postgres,financial.source_system_v1,PROD)",
+      "urn:li:dataset:(urn:li:dataPlatform:kafka,compliance.audit_stream,PROD)"
+    ]
+  },
+  "objective": "Exercise the official-MCP recorded-response contract harness: normalize one recorded DataHub MCP read-only response into a governed NormalizedContextRecord and deterministic WorkPacket while preserving attribution, provenance, authority state, and fail-closed behavior. No live MCP connection or official tool invocation has yet occurred.",
+  "packet_type": "datahub_mcp_readonly_work_packet",
+  "retrieval": {
+    "attribution": {
+      "data_governance_owner": "compliance-team",
+      "license_or_use_constraint": "internal-demo-readonly-only",
+      "owner_team": "data-platform-finance",
+      "retrieved_by": "recorded-mcp-readonly-replay",
+      "sla_contact": "oncall-finance"
+    },
+    "content_digest": "e17ed7e1915cfe2791db558d86630faef3f48d1d1f3fcd3a998cb080f45f0589",
+    "mode": "fixture",
+    "provenance": {
+      "content_encoding": "application/json",
+      "request_id": "req-datahub-mcp-readonly-fixture-0001",
+      "response_path": "fixtures/datahub-mcp-readonly-response.json",
+      "retrieved_at": "2026-08-06T00:00:00.000Z",
+      "transport": "mcp-readonly-recorded-local"
+    },
+    "response_path": "fixtures/datahub-mcp-readonly-response.json",
+    "source_identity": "datahub-official-mcp",
+    "tool_identity": "datahub.mcp.getDataset"
+  },
+  "schema_version": "datahub-mcp-readonly-work-packet/v1",
+  "stop_condition": "Stop after the official-MCP recorded-response contract harness proof is ready for independent review. Do not connect live DataHub MCP, invoke official tools, store credentials, deploy, mutate IAM/OAuth, or expand beyond the lane allowed scope.",
+  "unknowns": [
+    "pending live pass: actual tools/list from a live official DataHub MCP server",
+    "pending live pass: actual server/connection identity",
+    "pending live pass: actual read-tool identity (recorded tool_identity is a fixture contract label, not discovered inventory)",
+    "pending live pass: one isolated read-only call over a live MCP connection",
+    "recorded harness enforces ATTRIBUTION_CONFLICT for owner_team/data_governance_owner mismatches; live-server conflict policy remains pending",
+    "metadata freshness policy remains UNKNOWN until an explicit window is approved (no freshness threshold invented)",
+    "pending live pass: public-repository implementation and CI",
+    "whether a future authorized live MCP endpoint will emit byte-identical envelopes",
+    "whether MG MCP search will surface a runtime packet identity for this recorded response",
+    "approved consumers beyond PROPOSED eligibility",
+    "downstream consumers not present in recorded content"
+  ],
+  "validation_commands": [
+    "npm ci",
+    "npm run typecheck",
+    "npm test",
+    "npm run build",
+    "npm run demo:json",
+    "node --test dist/tests/datahub-mcp-readonly.test.js",
+    "git diff --check"
+  ]
+}

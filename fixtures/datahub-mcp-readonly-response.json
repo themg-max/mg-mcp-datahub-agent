@@ -1,0 +1,103 @@
+{
+  "contract_class": "official-datahub-mcp-readonly-recorded-response",
+  "retrieval_mode": "official_datahub_mcp_readonly",
+  "source": {
+    "identity": "datahub-official-mcp",
+    "system": "DataHub",
+    "environment": "synthetic-recorded-readonly"
+  },
+  "tool": {
+    "identity": "datahub.mcp.getDataset",
+    "name": "getDataset",
+    "version": "readonly-v1",
+    "operation": "read"
+  },
+  "attribution": {
+    "owner_team": "data-platform-finance",
+    "data_governance_owner": "compliance-team",
+    "retrieved_by": "recorded-mcp-readonly-replay",
+    "license_or_use_constraint": "internal-demo-readonly-only",
+    "sla_contact": "oncall-finance"
+  },
+  "provenance": {
+    "retrieved_at": "2026-08-06T00:00:00.000Z",
+    "request_id": "req-datahub-mcp-readonly-fixture-0001",
+    "content_encoding": "application/json",
+    "transport": "mcp-readonly-recorded-local"
+  },
+  "content": {
+    "dataset_urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,financial.transactions.ledger_v2,PROD)",
+    "platform": "postgres",
+    "name": "ledger_v2",
+    "description": "Immutable ledger of financial transactions used for regulated reporting exercises.",
+    "ownership": {
+      "owner_team": "data-platform-finance",
+      "data_governance_owner": "compliance-team",
+      "sla_contact": "oncall-finance"
+    },
+    "schema": {
+      "fields": [
+        {
+          "name": "transaction_id",
+          "type": "varchar(255)",
+          "required": true,
+          "nullable": false,
+          "description": "Unique identifier per transaction"
+        },
+        {
+          "name": "timestamp_utc",
+          "type": "timestamp",
+          "required": true,
+          "nullable": false,
+          "description": "UTC timestamp when transaction occurred"
+        },
+        {
+          "name": "amount_usd",
+          "type": "decimal(19,2)",
+          "required": true,
+          "nullable": false,
+          "description": "Amount in USD"
+        },
+        {
+          "name": "actor_principal",
+          "type": "varchar(512)",
+          "required": true,
+          "nullable": false,
+          "description": "Service principal or user who executed the transaction"
+        }
+      ]
+    },
+    "upstream_lineage": [
+      {
+        "dataset_urn": "urn:li:dataset:(urn:li:dataPlatform:postgres,financial.source_system_v1,PROD)",
+        "transformation": "normalize and deduplicate"
+      },
+      {
+        "dataset_urn": "urn:li:dataset:(urn:li:dataPlatform:kafka,compliance.audit_stream,PROD)",
+        "transformation": "join and validate signatures"
+      }
+    ],
+    "governance_labels": {
+      "sensitivity": "PII_RESTRICTED",
+      "retention_days": 2555,
+      "requires_audit_log": true,
+      "encryption_at_rest": "AES-256-GCM"
+    },
+    "quality_assertions": [
+      {
+        "type": "completeness",
+        "threshold": "99.99%",
+        "check_frequency": "hourly"
+      },
+      {
+        "type": "timeliness",
+        "max_latency_minutes": 5
+      },
+      {
+        "type": "uniqueness",
+        "column": "transaction_id",
+        "freshness_check": "daily"
+      }
+    ]
+  }
+}

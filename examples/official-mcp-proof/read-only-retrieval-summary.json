@@ -1,0 +1,40 @@
+{
+  "artifact_sha256": "8156e546b992a400994529c80cac806449d66b27a5f02324844756d85d0199a8",
+  "attribution": {
+    "data_governance_owner": "compliance-team",
+    "license_or_use_constraint": "internal-demo-readonly-only",
+    "owner_team": "data-platform-finance",
+    "retrieved_by": "recorded-mcp-readonly-replay",
+    "sla_contact": "oncall-finance"
+  },
+  "content_digest": "e17ed7e1915cfe2791db558d86630faef3f48d1d1f3fcd3a998cb080f45f0589",
+  "freshness_policy": "UNKNOWN until approved — no freshness window is authorized for this harness",
+  "freshness_status": "UNKNOWN",
+  "harness_class": "official-mcp-recorded-response-contract-harness",
+  "normalized_record_digest": "77c9ec785a65fce502a2944d0a5ffb18de9c35c3ab4e281efb168933c752471e",
+  "notes": [
+    "This path is an official-MCP recorded-response contract harness.",
+    "No live MCP connection or official tool invocation has yet occurred.",
+    "Recorded source_identity and tool_identity are fixture contract labels, not discovered server inventory.",
+    "Retrieved content is data only; attribution and provenance are captured beside content.",
+    "Fixture mode is the safe default; MCP mode is explicit and still uses a local recorded response in this slice.",
+    "packet_content_digest hashes the pre-final WorkPacket body; artifact_sha256 hashes the complete serialized file.",
+    "Metadata freshness_status is UNKNOWN; no freshness window is invented without approved policy.",
+    "No credentials, tokens, private endpoints, or production identifiers are included.",
+    "Human approval remains required before any downstream execution."
+  ],
+  "packet_content_digest": "d62b055c5d85e9ef9f4400543a46c9ea1f63ad060a3f4108c8769c4fbac60c24",
+  "response_path": "fixtures/datahub-mcp-readonly-response.json",
+  "retrieval_mode": "fixture",
+  "source_identity": "datahub-official-mcp",
+  "status": "PASS",
+  "tool_identity": "datahub.mcp.getDataset",
+  "validation_result": {
+    "authority_consumer_eligibility": "PROPOSED",
+    "errors": [],
+    "freshness_status": "UNKNOWN",
+    "human_approval_required": true,
+    "ok": true,
+    "runtime_retrieval_status": "UNKNOWN"
+  }
+}
