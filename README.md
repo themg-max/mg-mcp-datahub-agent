@@ -18,6 +18,25 @@ Generated packets are proposals only. They are never approval, deployment author
 - Quarantined evidence should stay out of authority decisions.
 - Unknown dependencies should fail closed instead of being guessed.
 
+## Official-MCP recorded-response contract harness
+
+Bounded **official-MCP recorded-response contract harness**: a recorded DataHub MCP read-only response is normalized into a deterministic WorkPacket while preserving attribution, provenance, authority state, fail-closed behavior, and mandatory human approval.
+
+**Recorded MCP read-only contract harness is verified. Live official MCP server validation remains a separate validation step.**
+
+No live MCP connection, production DataHub access, or autonomous execution is claimed by this harness.
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run build
+node dist/src/cli.js --mode=fixture
+node dist/src/cli.js --mode=mcp
+```
+
+Details: [docs/datahub-mcp-readonly-demo.md](docs/datahub-mcp-readonly-demo.md)
+
 ## Architecture overview
 - `DataHubClient`: read-only transport for optional metadata retrieval.
 - `DataHubContextAdapter`: defensive normalization for synthetic or future provider input.
@@ -109,7 +128,7 @@ A deterministic example is committed at `fixtures/datahub-context.json`.
 
 ## Current limitations
 - This phase is fixture-only.
-- Live DataHub endpoints are intentionally unverified and optional.
+- Recorded MCP read-only contract harness is verified. Live official MCP server validation remains a separate validation step.
 - No PR creation, merge, deployment, database, web UI, or MCP server is included.
 
 ## How this advances MG MCP
