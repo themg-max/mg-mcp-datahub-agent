@@ -7,6 +7,7 @@
     "source_binding_status": "LOCAL_OSS_MCP_VERIFIED"
   },
   "captured_at": "2026-08-07T01:06:48.607Z",
+  "datahub_writes": false,
   "digests": {
     "artifact_sha256": "78b91954f9410c616d9cf9f1dd37e7fed2277fd31003a0c2bb0dd9929f88e7d5",
     "content_digest": "7dc93e79a702254570cae993eed9d7ab832d7cead6c6c07086b7ef5b59606ccb",
@@ -31,6 +32,7 @@
     "local_token_provenance": "local_datahubenv_gms_localhost_8080_jwt",
     "persistence": "NONE"
   },
+  "managed_cloud_oauth": false,
   "mcp_server": {
     "implementation": "mcp-server-datahub (official open-source)",
     "protocol_version": "2024-11-05",
@@ -38,6 +40,7 @@
     "transport": "http-jsonrpc-stateless",
     "version": "0.6.0"
   },
+  "metadata_call_count": 1,
   "notes": [
     "Local DataHub OSS official MCP read-only validation path.",
     "Exactly one tools/call executed after live tools/list discovery.",
@@ -52,6 +55,7 @@
     "This proof does not claim production activation, managed Cloud OAuth completion, or DataHub writes.",
     "Source freeze merge (internal evidence package): 0a25a551fa2ef828956dd6052da284ff2707faf2"
   ],
+  "production_activation": false,
   "public_packaging": {
     "classification": "OPTIONAL",
     "production_activation": false,

@@ -14,9 +14,11 @@ AI agents can fail when context is stale, conflicting, untrusted, too broad, or 
 Generated packets are proposals only. They are never approval, deployment authority, or a write-back mechanism.
 
 ## DataHub usage
-- Default path consumes **synthetic / recorded** DataHub-shaped metadata (fixtures).
-- Optional future live transport remains read-only and is not required for the judge demo.
-- Official open-source `mcp-server-datahub` local verification is documented as optional historical evidence only.
+- Default path consumes **synthetic / recorded** DataHub-shaped metadata (fixtures) — Mode A.
+- Optional Mode B can run a **local DataHub OSS** stack with the official open-source
+  `mcp-server-datahub==0.6.0` for exactly one read-only metadata `tools/call` when
+  `DATAHUB_LOCAL_MCP_ALLOW=true` (fail-closed otherwise).
+- No DataHub writes, no managed Cloud OAuth, and no production activation are claimed.
 
 ## Why governed context matters
 - Planning-only evidence should not authorize implementation.
@@ -35,11 +37,18 @@ npm ci
 jq . examples/official-mcp-proof/read-only-retrieval-summary.json
 ```
 
-Optional Mode B is fail-closed unless explicitly allowed and does not claim production activation:
+Optional Mode B is fail-closed unless explicitly allowed. With allow + local OSS GMS +
+official MCP, it performs exactly one live read-only metadata call (not production activation):
 
 ```bash
 env -u DATAHUB_LOCAL_MCP_ALLOW ./scripts/datahub-judge-demo.sh --mode=local-oss
 # expected: exit 3, BLOCKED, no MCP request
+
+# Optional live path (operator-owned local stack; placeholders only):
+# export DATAHUB_LOCAL_MCP_ALLOW=true
+# export DATAHUB_GMS_URL=http://localhost:8080
+# export DATAHUB_GMS_TOKEN="<local-token>"
+# ./scripts/datahub-judge-demo.sh --mode=local-oss
 ```
 
 Sanitized historical local-only proof (VERIFIED_LOCAL_ONLY):
@@ -52,9 +61,10 @@ Competition index: [docs/competition/datahub-judge-submission-index.md](docs/com
 
 Bounded **official-MCP recorded-response contract harness**: a recorded DataHub MCP read-only response is normalized into a deterministic WorkPacket while preserving attribution, provenance, authority state, fail-closed behavior, and mandatory human approval.
 
-**Recorded MCP read-only contract harness is verified. Live official MCP server validation remains a separate validation step.**
+**Recorded MCP read-only contract harness is verified (Mode A).** Optional Mode B can exercise
+the official open-source MCP server against **local DataHub OSS** when explicitly allowed.
 
-No live MCP connection, production DataHub access, or autonomous execution is claimed by this harness.
+No production DataHub access, managed Cloud OAuth, DataHub writes, or autonomous execution is claimed.
 
 ```bash
 npm ci
@@ -136,9 +146,14 @@ src/
   datahub/
     client.ts
     context-adapter.ts
+    mcp-client.ts
+    local-oss-mcp-client.ts
+    local-oss-validation.ts
 tests/
   context-adapter.test.ts
   datahub-client.test.ts
+  datahub-mcp-readonly.test.ts
+  datahub-mcp-local-readonly.test.ts
   work-packet.test.ts
   work-packet.dedup.test.ts
 ```
@@ -170,7 +185,9 @@ Input fixture: `fixtures/datahub-context.json`
 ## Current limitations
 - Default demo and judge Mode A are fixture / recorded-response only.
 - Recorded MCP read-only contract harness is verified in-repo.
-- Optional local OSS Mode B is fail-closed by default; historical local proof is VERIFIED_LOCAL_ONLY and is not production activation.
+- Optional local OSS Mode B is fail-closed by default; when allowed it uses official
+  `mcp-server-datahub==0.6.0` for exactly one local read. Classification remains
+  VERIFIED_LOCAL_ONLY and is not production activation.
 - Managed Cloud OAuth / production tenant activation is not claimed.
 - No DataHub writes, MG MCP writes, autonomous PR merge, deployment, IAM, or secret mutation paths are included.
 
@@ -188,14 +205,13 @@ This repository is a focused, public proof-of-concept adapter that demonstrates 
   - Adds fixture-driven demo and CI workflow suitable for public review.
   - Adds an official-MCP recorded-response read-only contract harness with committed proof summary.
   - Adds judge preflight/demo scripts, quickstart, competition evidence index, and sanitized VERIFIED_LOCAL_ONLY local-oss proof packaging.
+  - Ports the optional local DataHub OSS official MCP read-only driver (Mode B) with
+    fail-closed allow gate, pinned `mcp-server-datahub==0.6.0`, and exactly one metadata read.
 - Baseline vs new-work disclosure: [docs/competition/baseline-new-work-disclosure.md](docs/competition/baseline-new-work-disclosure.md)
 
 ## What remains private
 - Production MG MCP servers, private configuration, and any internal integration code remain in private repositories and are not part of this public adapter.
 - No private data, credentials, or operational secrets are included in this repository.
-
-## Next phase: official DataHub MCP integration
-The next phase is official DataHub MCP integration in PR #2 of this public repository. That work will happen in a separate, authorized workstream with the appropriate access controls, credentials, and operational governance.
 
 ## Competition Evidence
 - Competition: Build with DataHub: The Agent Hackathon

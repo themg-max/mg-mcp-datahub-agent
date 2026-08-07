@@ -28,19 +28,23 @@ the fail-closed local-live gate.
 
    Call out: `status=PASS`, `human_approval_required=true`, no secrets.
 
-4. **Fail-closed Mode B (30s)**
+4. **Fail-closed Mode B + OSS story (40s)**
 
    ```bash
    env -u DATAHUB_LOCAL_MCP_ALLOW ./scripts/datahub-judge-demo.sh --mode=local-oss
    echo exit:$?
    ```
 
-   Expected: exit 3, `BLOCKED`, no MCP request. Point to sanitized historical
-   VERIFIED_LOCAL_ONLY summary if asked.
+   Expected: exit 3, `BLOCKED`, no MCP request.
+
+   Video contract (optional live cut): **DataHub OSS → official mcp-server-datahub →
+   one read-only tools/call → governed WorkPacket** with
+   `consumer_eligibility=PROPOSED` and `human_approval_required=true`. Point to
+   sanitized VERIFIED_LOCAL_ONLY summary when the stack is not running.
 
 5. **Close (20s)**  
    Baseline vs competition work is disclosed. Production activation and writes
-   are not claimed.
+   are not claimed. Hackathon path uses DataHub OSS, not a managed cloud tenant.
 
 ## Supported platform
 

@@ -20,18 +20,22 @@ already-merged public recorded-response harness (PR #25).
   - recorded fixture envelope
   - deterministic proof summary under `examples/official-mcp-proof/`
   - focused tests (`tests/datahub-mcp-readonly.test.ts`)
-- Judge reproducibility packaging (this sync):
+- Judge reproducibility packaging:
   - `docs/datahub-judge-quickstart.md`
   - `scripts/datahub-judge-preflight.sh`
-  - `scripts/datahub-judge-demo.sh` (Mode A + fail-closed Mode B)
+  - `scripts/datahub-judge-demo.sh` (Mode A + fail-closed / live Mode B)
   - competition evidence index and demo notes
-  - sanitized historical VERIFIED_LOCAL_ONLY Mode B summary
+  - sanitized VERIFIED_LOCAL_ONLY Mode B summary
+- Optional local DataHub OSS official MCP read-only driver (Mode B):
+  - `src/datahub/local-oss-mcp-client.ts` / `local-oss-validation.ts`
+  - pinned `mcp-server-datahub==0.6.0`, allow gate, exactly one metadata read
+  - focused tests in `tests/datahub-mcp-local-readonly.test.ts`
 - Explicit baseline/new-work and limitation statements in README.
 
 ## What remains out of scope / not claimed
 
 - Managed Cloud OAuth / production tenant activation
-- Live production DataHub reads
+- Live **production** DataHub reads (local OSS only when explicitly allowed)
 - DataHub writes or MG MCP writes
 - IAM / secret / deployment changes
 - Devpost field mutation from this packaging lane
@@ -42,5 +46,5 @@ already-merged public recorded-response harness (PR #25).
 | Surface | Classification |
 |---------|----------------|
 | Mode A fixture/recorded harness | DEFAULT · DETERMINISTIC · PUBLIC_SAFE |
-| Mode B local OSS live read | OPTIONAL · VERIFIED_LOCAL_ONLY · historical sanitized summary only |
+| Mode B local OSS official MCP read | OPTIONAL · VERIFIED_LOCAL_ONLY · fail-closed default · not production activation |
 | Production activation | NOT CLAIMED |

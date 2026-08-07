@@ -35,6 +35,7 @@ WorkPacket               (deterministic, human_approval_required=true)
 |------|---------------|----------|
 | `fixture` | default / `--mode=fixture` | Safe default. Consumes the recorded envelope as fixture-backed replay. Authority `record_status=FIXTURE`. |
 | `mcp` | **explicit** `--mode=mcp` | Recorded-response contract label for the official-MCP path. Still uses a **local recorded** envelope in this slice (no live credentials/network; no official tool invocation). Authority `record_status=MCP_READONLY_RECORDED`. |
+| `local-oss` | **explicit** `--mode=local-oss` | Optional **live local DataHub OSS** path via official `mcp-server-datahub` (Mode B). Fail-closed unless `DATAHUB_LOCAL_MCP_ALLOW=true`. Exactly one read-only `tools/call`. Authority `record_status=LOCAL_OSS_MCP_LIVE_READ`, `runtime_retrieval_status=VERIFIED_LOCAL_ONLY`. See [datahub-judge-quickstart.md](./datahub-judge-quickstart.md). |
 
 ## Quickstart
 
