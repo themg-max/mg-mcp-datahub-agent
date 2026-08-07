@@ -4,10 +4,17 @@ Public packaging derived from internal freeze merge
 `0a25a551fa2ef828956dd6052da284ff2707faf2` (PR #2768 evidence package) and the
 already-merged public recorded-response harness (PR #25).
 
+## Devpost form choice (required)
+
+**Includes pre-existing code (described below)**
+
+Do **not** claim the whole platform was created during the competition.
+
 ## What existed before the competition
 
-- MG MCP governance concepts: lane/worktree discipline, authority states, human
-  approval, fail-closed unknowns, review handoffs.
+- MG MCP governance concepts and earlier fixture/bootstrap work pre-existed:
+  lane/worktree discipline, authority states, human approval, fail-closed
+  unknowns, review handoffs.
 - Public repository bootstrap for a fixture-first DataHub → governed WorkPacket
   adapter (`@themg/contextops-datahub-agent`).
 - Architecture docs for skill-execution boundaries and MG MCP alignment intent.
@@ -15,18 +22,20 @@ already-merged public recorded-response harness (PR #25).
 
 ## What was added during the competition (public-safe)
 
-- Official-MCP **recorded-response** read-only contract harness:
+- Official MCP recorded-response integration:
   - `src/datahub/mcp-client.ts`
   - recorded fixture envelope
   - deterministic proof summary under `examples/official-mcp-proof/`
   - focused tests (`tests/datahub-mcp-readonly.test.ts`)
-- Judge reproducibility packaging (this sync):
+- Live-local official MCP read-only validation with sanitized public
+  `VERIFIED_LOCAL_ONLY` proof
+  (`examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json`)
+- Deterministic proof + judge packaging:
   - `docs/datahub-judge-quickstart.md`
   - `scripts/datahub-judge-preflight.sh`
   - `scripts/datahub-judge-demo.sh` (Mode A + fail-closed Mode B)
   - competition evidence index and demo notes
-  - sanitized historical VERIFIED_LOCAL_ONLY Mode B summary
-- Explicit baseline/new-work and limitation statements in README.
+- Tests, public examples, and baseline/new-work disclosure packaging
 
 ## What remains out of scope / not claimed
 

@@ -14,9 +14,10 @@ AI agents can fail when context is stale, conflicting, untrusted, too broad, or 
 Generated packets are proposals only. They are never approval, deployment authority, or a write-back mechanism.
 
 ## DataHub usage
-- Default path consumes **synthetic / recorded** DataHub-shaped metadata (fixtures).
-- Optional future live transport remains read-only and is not required for the judge demo.
-- Official open-source `mcp-server-datahub` local verification is documented as optional historical evidence only.
+- Default judge path consumes **synthetic / recorded** DataHub-shaped metadata (fixtures) with zero secrets.
+- Official DataHub MCP Server integration has been verified against **local DataHub OSS** in a bounded read-only validation.
+- A sanitized `VERIFIED_LOCAL_ONLY` proof is committed under `examples/official-mcp-proof/`.
+- The default judge path remains deterministic and zero-secret; no production activation or DataHub writes are claimed.
 
 ## Why governed context matters
 - Planning-only evidence should not authorize implementation.
@@ -52,9 +53,10 @@ Competition index: [docs/competition/datahub-judge-submission-index.md](docs/com
 
 Bounded **official-MCP recorded-response contract harness**: a recorded DataHub MCP read-only response is normalized into a deterministic WorkPacket while preserving attribution, provenance, authority state, fail-closed behavior, and mandatory human approval.
 
-**Recorded MCP read-only contract harness is verified. Live official MCP server validation remains a separate validation step.**
+**Recorded MCP read-only contract harness is verified (Mode A default).**
+**Optional local OSS official MCP validation is documented as sanitized historical `VERIFIED_LOCAL_ONLY` evidence and is not production activation.**
 
-No live MCP connection, production DataHub access, or autonomous execution is claimed by this harness.
+Mode A claims no live MCP connection. No production DataHub access, DataHub writes, or autonomous execution are claimed.
 
 ```bash
 npm ci
@@ -176,33 +178,37 @@ A deterministic example is committed at `fixtures/datahub-context.json`.
 This repository is a focused, public proof-of-concept adapter that demonstrates how provider-shaped metadata (DataHub-shaped records) can be translated into a public model inspired by MG MCP: `NormalizedContextRecord[]` and a deterministic `WorkPacket` suitable for human review.
 
 ## What existed before the competition
-- The MG MCP governance architecture (lane/worktree discipline, authority model, review handoffs) existed prior to this public adapter. That baseline provides the policy and operational context this adapter targets.
+- MG MCP governance concepts and earlier fixture/bootstrap work pre-existed this competition submission (lane/worktree discipline, authority model, human approval, fail-closed unknowns, review handoffs, and early public fixture-first bootstrap).
+- This repository does **not** claim the whole MG platform was created during the competition.
 
 ## What was built during the competition
-- A public TypeScript reference implementation that:
-  - Normalizes DataHub-shaped metadata into source-neutral context records.
-  - Produces deterministic, canonicalized work packets with provenance and sorted, deduplicated arrays for stable output.
-  - Adds tests that prove reordered inputs and duplicate provenance are handled deterministically.
-  - Adds fixture-driven demo and CI workflow suitable for public review.
-  - Adds an official-MCP recorded-response read-only contract harness with committed proof summary.
-  - Adds judge preflight/demo scripts, quickstart, competition evidence index, and sanitized VERIFIED_LOCAL_ONLY local-oss proof packaging.
+- Competition work added:
+  - official MCP recorded-response integration and proof
+  - live-local official MCP read-only validation (sanitized `VERIFIED_LOCAL_ONLY` public proof)
+  - deterministic Mode A judge packaging and fail-closed Mode B gate
+  - tests, quickstart, competition evidence index, and public examples
+  - governed WorkPacket generation from DataHub-shaped metadata
 - Baseline vs new-work disclosure: [docs/competition/baseline-new-work-disclosure.md](docs/competition/baseline-new-work-disclosure.md)
 
 ## What remains private
 - Production MG MCP servers, private configuration, and any internal integration code remain in private repositories and are not part of this public adapter.
 - No private data, credentials, or operational secrets are included in this repository.
 
-## Next phase: official DataHub MCP integration
-The next phase is official DataHub MCP integration in PR #2 of this public repository. That work will happen in a separate, authorized workstream with the appropriate access controls, credentials, and operational governance.
+## Official MCP status (submission-aligned)
+Official DataHub MCP Server integration has been verified against local DataHub OSS in a bounded read-only validation. The public repository includes a sanitized `VERIFIED_LOCAL_ONLY` proof. The default judge path remains deterministic and zero-secret; no production activation or DataHub writes are claimed.
+
+Managed Cloud OAuth / production tenant activation remains out of scope.
 
 ## Competition Evidence
 - Competition: Build with DataHub: The Agent Hackathon
-- Baseline (pre-existing): MG MCP governance and architecture existed prior to this public adapter
-- New public work: This TypeScript DataHub adapter and deterministic work-packet generator
-- AI contribution: Copilot coding agent assisted in edits; human reviewers scoped, approved, and validated the public reference implementation and the no-write, fixture-first demo boundary
-- Validation carried out: `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, `npm run demo:json` (JSON parse validation), security scan
-- Pull request: Draft PR #1 on branch `copilot/initial-implementation`
-- Demo video: Not yet recorded
+- Category target: Metadata-Aware Code Generation & Development
+- Technologies: DataHub OSS / Core Platform; DataHub MCP Server
+- Baseline form choice: **Includes pre-existing code** (see disclosure doc above)
+- Public repo: https://github.com/themg-max/mg-mcp-datahub-agent
+- Sample output: https://github.com/themg-max/mg-mcp-datahub-agent/tree/main/examples
+- Judge packaging sync: PR #26 (`4e567221687a6e9c42fcc81fa05e4ea06281259d`)
+- Validation carried out on clean `main`: `npm ci`, preflight, Mode A demo PASS, fail-closed Mode B exit 3, `npm test` (31 pass)
+- Demo video: record 2:40–2:55 covering problem thesis, VERIFIED_LOCAL_ONLY proof, Mode A run, generated WorkPacket, fail-closed Mode B, baseline disclosure, and judge quickstart; publish on public YouTube or Vimeo and verify in incognito
 
 ## License
 Apache-2.0 (`LICENSE`)
