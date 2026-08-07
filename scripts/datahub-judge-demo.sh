@@ -20,9 +20,8 @@ print_proof() {
 }
 
 allow_is_true() {
-  local v
-  v="$(printf '%s' "${DATAHUB_LOCAL_MCP_ALLOW-}" | tr '[:upper:]' '[:lower:]')"
-  [ "$v" = "true" ]
+  # Require exact literal string 'true' for the operator allow gate.
+  [ "${DATAHUB_LOCAL_MCP_ALLOW-}" = "true" ]
 }
 
 if [ "$MODE" = "--mode=fixture" ]; then

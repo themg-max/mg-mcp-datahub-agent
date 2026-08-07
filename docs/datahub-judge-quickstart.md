@@ -119,7 +119,6 @@ Expected:
 export DATAHUB_GMS_URL=http://localhost:8080
 export DATAHUB_GMS_TOKEN="<local-gms-token-placeholder>"
 uvx --from mcp-server-datahub==0.6.0 mcp-server-datahub --transport http
-# equivalent: python3 -m mcp_server_datahub --transport http
 
 # 3) Export local-only env for the judge harness (never commit tokens; never pass tokens on argv)
 export DATAHUB_LOCAL_MCP_ALLOW=true
@@ -167,7 +166,7 @@ npm run demo
 ## Security and reproducibility notes
 
 - Mode A uses only committed fixtures and deterministic processing.
-- Mode B refuses contact unless `DATAHUB_LOCAL_MCP_ALLOW` lowercases to exactly `true`.
+- Mode B requires DATAHUB_LOCAL_MCP_ALLOW to be exactly the literal string `true`.
 - No production credentials, tokens, or JWTs are required or committed for Mode A.
 - Do not echo tokens; do not put tokens on CLI argv.
 - Private monorepo governance paths are not required to run Mode A.

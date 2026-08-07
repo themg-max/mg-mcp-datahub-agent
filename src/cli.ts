@@ -58,7 +58,7 @@ Mode B flags:
   --write-local-oss-proof   Write sanitized Mode B proof under examples/official-mcp-proof/
 
 Mode B environment (never pass secrets on argv; placeholders only):
-  DATAHUB_LOCAL_MCP_ALLOW=true          Required exact allow gate (case-insensitive true)
+  DATAHUB_LOCAL_MCP_ALLOW=true          Required exact allow gate (literal string 'true')
   DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:8000/mcp
                                         Canonical HTTP MCP endpoint (localhost only).
                                         Prefer this path; matches public live proof transport.

@@ -16,8 +16,9 @@ Generated packets are proposals only. They are never approval, deployment author
 ## DataHub usage
 - Default path consumes **synthetic / recorded** DataHub-shaped metadata (fixtures) — Mode A.
 - Optional Mode B can run a **local DataHub OSS** stack with the official open-source
-  `mcp-server-datahub==0.6.0` for exactly one read-only metadata `tools/call` when
-  `DATAHUB_LOCAL_MCP_ALLOW=true` (fail-closed otherwise).
+  `mcp-server-datahub==0.6.0` for exactly one read-only metadata `tools/call` when the operator
+  explicitly allows it. Mode B requires DATAHUB_LOCAL_MCP_ALLOW to be exactly the literal
+  string `true` (fail-closed otherwise).
 - No DataHub writes, no managed Cloud OAuth, and no production activation are claimed.
 
 ## Why governed context matters

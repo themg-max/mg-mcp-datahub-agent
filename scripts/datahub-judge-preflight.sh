@@ -36,35 +36,13 @@ require_file "scripts/datahub-judge-demo.sh"
 require_file "src/datahub/local-oss-mcp-client.ts"
 require_file "src/datahub/local-oss-validation.ts"
 
-if [ -n "${DATAHUB_LOCAL_MCP_ALLOW-}" ]; then
-  echo "DATAHUB_LOCAL_MCP_ALLOW is set — optional local-oss mode may contact a local MCP if enabled"
+if [ "${DATAHUB_LOCAL_MCP_ALLOW-}" = "true" ]; then
+  echo "DATAHUB_LOCAL_MCP_ALLOW is exactly 'true' — optional local-oss mode may contact a local MCP if enabled"
 else
-  echo "DATAHUB_LOCAL_MCP_ALLOW is not set — local-oss mode remains fail-closed (default)"
+  echo "DATAHUB_LOCAL_MCP_ALLOW is not exactly 'true' — local-oss mode remains fail-closed (default)"
 fi
 
-# Optional non-fatal GMS / HTTP MCP probes (never prints tokens).
-GMS_URL="${DATAHUB_GMS_URL:-http://localhost:8080}"
-MCP_URL="${DATAHUB_LOCAL_MCP_URL:-http://127.0.0.1:8000/mcp}"
-if command -v curl >/dev/null 2>&1; then
-  if curl -fsS --max-time 2 "${GMS_URL%/}/health" >/dev/null 2>&1 \
-    || curl -fsS --max-time 2 "${GMS_URL%/}/" >/dev/null 2>&1; then
-    echo "optional GMS probe: reachable at configured/default local URL (token not used)"
-  else
-    echo "optional GMS probe: not reachable (OK for Mode A; required only for live Mode B)"
-  fi
-  if curl -fsS --max-time 2 -o /dev/null -w '' "$MCP_URL" >/dev/null 2>&1 \
-    || curl -fsS --max-time 2 -o /dev/null -w '' -X POST \
-      -H 'Content-Type: application/json' \
-      -d '{}' "$MCP_URL" >/dev/null 2>&1; then
-    echo "optional HTTP MCP probe: endpoint responds at ${MCP_URL} (body not inspected)"
-  else
-    echo "optional HTTP MCP probe: ${MCP_URL} not reachable (OK for Mode A; required for live Mode B HTTP path)"
-  fi
-else
-  echo "optional GMS/MCP probes: curl missing (skipped)"
-fi
-
-echo "Mode B canonical transport: HTTP mcp-server-datahub==0.6.0 at DATAHUB_LOCAL_MCP_URL=${MCP_URL}"
+echo "Mode B canonical transport: HTTP mcp-server-datahub==0.6.0 at DATAHUB_LOCAL_MCP_URL=${DATAHUB_LOCAL_MCP_URL:-http://127.0.0.1:8000/mcp}"
 echo "Mode B tip: uvx --from mcp-server-datahub==0.6.0 mcp-server-datahub --transport http"
 echo "Mode B note: stdio spawn without HTTP URL is non-canonical for public judges"
 

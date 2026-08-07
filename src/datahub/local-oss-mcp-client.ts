@@ -193,7 +193,8 @@ export function digestJson(value: unknown): string {
 }
 
 export function isLocalOssAllowed(env: LocalOssMcpEnv = {}): boolean {
-  return String(env.DATAHUB_LOCAL_MCP_ALLOW || '').toLowerCase() === 'true';
+  // Strict literal match: only the exact string 'true' is allowed.
+  return env.DATAHUB_LOCAL_MCP_ALLOW === 'true';
 }
 
 export function resolveLocalMcpEndpoint(env: LocalOssMcpEnv = {}): string {

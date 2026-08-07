@@ -221,10 +221,12 @@ async function startMockLocalMcp(options: {
   };
 }
 
-test('isLocalOssAllowed requires exact true (case-insensitive)', () => {
+test('isLocalOssAllowed requires exact true (literal)', () => {
   assert.equal(isLocalOssAllowed({}), false);
   assert.equal(isLocalOssAllowed({ DATAHUB_LOCAL_MCP_ALLOW: 'yes' }), false);
-  assert.equal(isLocalOssAllowed({ DATAHUB_LOCAL_MCP_ALLOW: 'TRUE' }), true);
+  assert.equal(isLocalOssAllowed({ DATAHUB_LOCAL_MCP_ALLOW: 'TRUE' }), false);
+  assert.equal(isLocalOssAllowed({ DATAHUB_LOCAL_MCP_ALLOW: 'True' }), false);
+  assert.equal(isLocalOssAllowed({ DATAHUB_LOCAL_MCP_ALLOW: '1' }), false);
   assert.equal(isLocalOssAllowed({ DATAHUB_LOCAL_MCP_ALLOW: 'true' }), true);
 });
 
