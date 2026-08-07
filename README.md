@@ -144,7 +144,9 @@ tests/
 ```
 
 ## Example work packet
-A deterministic example is committed at `fixtures/datahub-context.json`.
+Generated output: `examples/generated-work-packet/work-packet.json`
+
+Input fixture: `fixtures/datahub-context.json`
 
 ## Trust and authority model
 - Authority states: `approved`, `planning_only`, `quarantined`, `unknown`.
