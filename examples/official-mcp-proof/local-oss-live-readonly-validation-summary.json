@@ -1,0 +1,166 @@
+{
+  "authority": {
+    "consumer_eligibility": "PROPOSED",
+    "human_approval_required": true,
+    "record_status": "LOCAL_OSS_MCP_LIVE_READ",
+    "runtime_retrieval_status": "VERIFIED_LOCAL_ONLY",
+    "source_binding_status": "LOCAL_OSS_MCP_VERIFIED"
+  },
+  "captured_at": "2026-08-07T01:06:48.607Z",
+  "digests": {
+    "artifact_sha256": "78b91954f9410c616d9cf9f1dd37e7fed2277fd31003a0c2bb0dd9929f88e7d5",
+    "content_digest": "7dc93e79a702254570cae993eed9d7ab832d7cead6c6c07086b7ef5b59606ccb",
+    "normalized_record_digest": "43a152aa826cd346ecbf03245cd2d2c976d2a732904bfa123a128e7e8f40fc09",
+    "packet_content_digest": "41a9ca0b10dbbc370f3c40642367af3ed17aca0b8eec84e9d18e0d88e5cbe1c0"
+  },
+  "environment": {
+    "compose_project": "datahub",
+    "deployment_modified": true,
+    "frontend_health": "unhealthy_without_compose_mutation",
+    "gms_health": "healthy",
+    "gms_url": "http://localhost:8080",
+    "mcp_package": "mcp-server-datahub",
+    "mcp_package_version": "0.6.0",
+    "mode": "local_datahub_oss",
+    "modification_scope": "start existing quickstart services only"
+  },
+  "harness_class": "official-datahub-mcp-local-oss-live-readonly-validation",
+  "local_auth": {
+    "human_use_authorization": "APPROVED",
+    "local_token_present": true,
+    "local_token_provenance": "local_datahubenv_gms_localhost_8080_jwt",
+    "persistence": "NONE"
+  },
+  "mcp_server": {
+    "implementation": "mcp-server-datahub (official open-source)",
+    "protocol_version": "2024-11-05",
+    "server_name": "datahub",
+    "transport": "http-jsonrpc-stateless",
+    "version": "0.6.0"
+  },
+  "notes": [
+    "Local DataHub OSS official MCP read-only validation path.",
+    "Exactly one tools/call executed after live tools/list discovery.",
+    "Server identity and tool inventory are from live initialize/tools/list \u2014 not fixture labels.",
+    "Local verification does not authorize production activation or MG MCP writes.",
+    "Recorded --mode=fixture|mcp harness remains non-live and unchanged.",
+    "No credentials, tokens, or secrets are included in this proof.",
+    "freshness_policy=UNKNOWN until approved \u2014 no freshness window is authorized for this harness",
+    "PUBLIC_SAFE packaging note: this is a sanitized historical VERIFIED_LOCAL_ONLY proof summary.",
+    "No credentials, JWTs, private filesystem paths, or production endpoints are included.",
+    "Re-running Mode B is optional and fail-closed unless DATAHUB_LOCAL_MCP_ALLOW=true with a local stack.",
+    "This proof does not claim production activation, managed Cloud OAuth completion, or DataHub writes.",
+    "Source freeze merge (internal evidence package): 0a25a551fa2ef828956dd6052da284ff2707faf2"
+  ],
+  "public_packaging": {
+    "classification": "OPTIONAL",
+    "production_activation": false,
+    "runtime_claim": "VERIFIED_LOCAL_ONLY",
+    "sanitized": true,
+    "source_freeze_merge": "0a25a551fa2ef828956dd6052da284ff2707faf2"
+  },
+  "retrieval": {
+    "attribution_status": "ENTITY_URN_ATTRIBUTED",
+    "content_digest": "7dc93e79a702254570cae993eed9d7ab832d7cead6c6c07086b7ef5b59606ccb",
+    "entity_identity": "urn:li:dataset:(urn:li:dataPlatform:powerbi,b2fd91.datahub_order_entries.Customer_Analytics_Measures,PROD)",
+    "executed": true,
+    "request_id": 3,
+    "sanitized_arguments": {
+      "num_results": 5,
+      "query": "dataset"
+    },
+    "timestamp": "2026-08-07T01:06:49.108Z"
+  },
+  "status": "PASS",
+  "tool_inventory": {
+    "count": 6,
+    "digest": "e2f9ddbc2c3fde264e3434179cffdf9c7e46d4de76ed5e5a83b44dc9808f4bcf",
+    "items": [
+      {
+        "annotations": {
+          "destructiveHint": null,
+          "idempotentHint": null,
+          "readOnlyHint": true
+        },
+        "classification": "read",
+        "description": "Search across DataHub entities using structured full-text search.",
+        "input_schema_digest": "0a4b768c3fc6bb8249032c30e2599d13c7e57eca0a02debf3a10784fd143fc22",
+        "name": "search"
+      },
+      {
+        "annotations": {
+          "destructiveHint": null,
+          "idempotentHint": null,
+          "readOnlyHint": true
+        },
+        "classification": "read",
+        "description": "Get upstream or downstream lineage for any entity, including datasets, schemaFields, dashboards, charts, etc.",
+        "input_schema_digest": "eeadf82bdbd11246ec05e4eb84044cc588b5c52581b56274d90685e8787885f5",
+        "name": "get_lineage"
+      },
+      {
+        "annotations": {
+          "destructiveHint": null,
+          "idempotentHint": null,
+          "readOnlyHint": true
+        },
+        "classification": "read",
+        "description": "Get SQL queries associated with a dataset or column to understand usage patterns.",
+        "input_schema_digest": "651eb9b89f3956a3323d3053e919de0a30145ca830ea3e939fe7e394a8109163",
+        "name": "get_dataset_queries"
+      },
+      {
+        "annotations": {
+          "destructiveHint": null,
+          "idempotentHint": null,
+          "readOnlyHint": true
+        },
+        "classification": "read",
+        "description": "Get detailed information about one or more entities by their DataHub URNs.",
+        "input_schema_digest": "2070c7f0d2d1010f8d42ba4fdbeca5dc85f24188861e3e423a5a91aa96bd7fb2",
+        "name": "get_entities"
+      },
+      {
+        "annotations": {
+          "destructiveHint": null,
+          "idempotentHint": null,
+          "readOnlyHint": true
+        },
+        "classification": "read",
+        "description": "List schema fields for a dataset, with optional keyword filtering and pagination.",
+        "input_schema_digest": "2f9d43f8d8d051588fcfe21d7af20dd9ec2c15d3c0c5b8991132912c4c099ba6",
+        "name": "list_schema_fields"
+      },
+      {
+        "annotations": {
+          "destructiveHint": null,
+          "idempotentHint": null,
+          "readOnlyHint": true
+        },
+        "classification": "read",
+        "description": "Get detailed lineage path(s) between two specific entities or columns.",
+        "input_schema_digest": "a8a57f5a438b6d58b372dddd78e9c78886c2748908288ed2ce99fe857b9a1575",
+        "name": "get_lineage_paths_between"
+      }
+    ],
+    "readonly_evidence": "readOnlyHint=true + preference order",
+    "selected_tool": "search",
+    "selected_tool_readonly": true
+  },
+  "unknowns": [
+    "approved metadata freshness window remains UNKNOWN",
+    "local OSS verification is not production/runtime activation",
+    "frontend quickstart may be unhealthy without compose secret mutation (GMS-only path authorized)",
+    "consumer eligibility remains PROPOSED until human approval",
+    "schema fields not returned by selected search tool (UNKNOWN)",
+    "ownership not returned by selected search tool (UNKNOWN)",
+    "lineage not returned by selected search tool (empty)",
+    "quality assertions not returned by selected search tool (empty)"
+  ],
+  "validation_result": {
+    "errors": [],
+    "fail_closed_code": null,
+    "ok": true,
+    "outcome": "PASS"
+  }
+}

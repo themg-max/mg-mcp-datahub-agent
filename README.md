@@ -13,10 +13,40 @@ AI agents can fail when context is stale, conflicting, untrusted, too broad, or 
 
 Generated packets are proposals only. They are never approval, deployment authority, or a write-back mechanism.
 
+## DataHub usage
+- Default path consumes **synthetic / recorded** DataHub-shaped metadata (fixtures).
+- Optional future live transport remains read-only and is not required for the judge demo.
+- Official open-source `mcp-server-datahub` local verification is documented as optional historical evidence only.
+
 ## Why governed context matters
 - Planning-only evidence should not authorize implementation.
 - Quarantined evidence should stay out of authority decisions.
 - Unknown dependencies should fail closed instead of being guessed.
+
+
+## Judge path (deterministic)
+
+Default judge experience is **Mode A** (zero secrets, recorded-response harness):
+
+```bash
+npm ci
+./scripts/datahub-judge-preflight.sh
+./scripts/datahub-judge-demo.sh --mode=fixture
+jq . examples/official-mcp-proof/read-only-retrieval-summary.json
+```
+
+Optional Mode B is fail-closed unless explicitly allowed and does not claim production activation:
+
+```bash
+env -u DATAHUB_LOCAL_MCP_ALLOW ./scripts/datahub-judge-demo.sh --mode=local-oss
+# expected: exit 3, BLOCKED, no MCP request
+```
+
+Sanitized historical local-only proof (VERIFIED_LOCAL_ONLY):
+`examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json`
+
+Full guide: [docs/datahub-judge-quickstart.md](docs/datahub-judge-quickstart.md)
+Competition index: [docs/competition/datahub-judge-submission-index.md](docs/competition/datahub-judge-submission-index.md)
 
 ## Official-MCP recorded-response contract harness
 
@@ -82,12 +112,21 @@ tsconfig.json
 docs/
   architecture.md
   demo.md
+  datahub-judge-quickstart.md
+  datahub-mcp-readonly-demo.md
   mg-mcp-alignment.md
+  competition/
 examples/
   generated-work-packet/
     work-packet.json
+  official-mcp-proof/
+    read-only-retrieval-summary.json
+    local-oss-live-readonly-validation-summary.json
   sample-pr/
     README.md
+scripts/
+  datahub-judge-preflight.sh
+  datahub-judge-demo.sh
 fixtures/
   datahub-context.json
   invalid-datahub-context.json
@@ -127,9 +166,11 @@ A deterministic example is committed at `fixtures/datahub-context.json`.
 3. Reuse `buildWorkPacket(...)` for bounded review output.
 
 ## Current limitations
-- This phase is fixture-only.
-- Recorded MCP read-only contract harness is verified. Live official MCP server validation remains a separate validation step.
-- No PR creation, merge, deployment, database, web UI, or MCP server is included.
+- Default demo and judge Mode A are fixture / recorded-response only.
+- Recorded MCP read-only contract harness is verified in-repo.
+- Optional local OSS Mode B is fail-closed by default; historical local proof is VERIFIED_LOCAL_ONLY and is not production activation.
+- Managed Cloud OAuth / production tenant activation is not claimed.
+- No DataHub writes, MG MCP writes, autonomous PR merge, deployment, IAM, or secret mutation paths are included.
 
 ## How this advances MG MCP
 This repository is a focused, public proof-of-concept adapter that demonstrates how provider-shaped metadata (DataHub-shaped records) can be translated into a public model inspired by MG MCP: `NormalizedContextRecord[]` and a deterministic `WorkPacket` suitable for human review.
@@ -143,6 +184,9 @@ This repository is a focused, public proof-of-concept adapter that demonstrates 
   - Produces deterministic, canonicalized work packets with provenance and sorted, deduplicated arrays for stable output.
   - Adds tests that prove reordered inputs and duplicate provenance are handled deterministically.
   - Adds fixture-driven demo and CI workflow suitable for public review.
+  - Adds an official-MCP recorded-response read-only contract harness with committed proof summary.
+  - Adds judge preflight/demo scripts, quickstart, competition evidence index, and sanitized VERIFIED_LOCAL_ONLY local-oss proof packaging.
+- Baseline vs new-work disclosure: [docs/competition/baseline-new-work-disclosure.md](docs/competition/baseline-new-work-disclosure.md)
 
 ## What remains private
 - Production MG MCP servers, private configuration, and any internal integration code remain in private repositories and are not part of this public adapter.

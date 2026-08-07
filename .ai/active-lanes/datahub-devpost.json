@@ -120,6 +120,26 @@
         "docs/datahub-mg-mcp-skill-bridge-architecture.md"
       ],
       "note": "Controlling-schema lane for Issue #17. Defines schema-valid immutable artifact evidence, payload-byte evidence, complete packet-lineage evidence, external-record digest binding, compatibility, and fail-closed behavior. PR #16 and Issue #14 remain blocked until this lane is reviewed and merged. Runtime implementation, fixtures, examples, dependencies, workflows, hooks, deployment, IAM, credentials, private or production data, DataHub writes, MG MCP writes, and autonomous merge remain blocked."
+    },
+    {
+      "id": "datahub-public-submission-sync-v1",
+      "status": "APPROVED",
+      "durable_branch": "feature/datahub-public-submission-sync-v1",
+      "owner": "vscode-orchestrator",
+      "artifact": "docs/competition/datahub-judge-submission-index.md",
+      "note": "Public-safe sync of frozen judge/demo submission packaging derived from internal freeze merge 0a25a551fa2ef828956dd6052da284ff2707faf2. Docs/scripts/proof packaging only. No runtime feature expansion, live DataHub read, DataHub write, OAuth/IAM/deploy, or Devpost mutation.",
+      "allowed_paths": [
+        ".ai/active-lanes/datahub-devpost.json",
+        "README.md",
+        "docs/datahub-judge-quickstart.md",
+        "docs/competition/datahub-judge-submission-index.md",
+        "docs/competition/baseline-new-work-disclosure.md",
+        "docs/competition/evidence-index.md",
+        "docs/competition/public-demo-notes.md",
+        "scripts/datahub-judge-preflight.sh",
+        "scripts/datahub-judge-demo.sh",
+        "examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json"
+      ]
     }
   ]
 }
