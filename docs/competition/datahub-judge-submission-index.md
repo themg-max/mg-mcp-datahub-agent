@@ -22,7 +22,9 @@ npm ci
 jq . examples/official-mcp-proof/read-only-retrieval-summary.json
 ```
 
-## Optional Mode B (local-only, fail-closed)
+## Optional Mode B (local DataHub OSS official MCP)
+
+Fail-closed without allow:
 
 ```bash
 env -u DATAHUB_LOCAL_MCP_ALLOW ./scripts/datahub-judge-demo.sh --mode=local-oss
@@ -30,14 +32,18 @@ env -u DATAHUB_LOCAL_MCP_ALLOW ./scripts/datahub-judge-demo.sh --mode=local-oss
 
 Expected: exit `3`, `BLOCKED`, no MCP request.
 
-Classification: OPTIONAL · VERIFIED_LOCAL_ONLY · NOT_PRODUCTION_ACTIVATION
+With allow + operator-owned local OSS GMS + official `mcp-server-datahub==0.6.0` over
+**HTTP** (`DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:8000/mcp`, GMS `http://localhost:8080`),
+Mode B performs initialize → tools/list → **exactly one** read-only tools/call and writes a
+sanitized proof. Classification: OPTIONAL · VERIFIED_LOCAL_ONLY · NOT_PRODUCTION_ACTIVATION.
+Stdio spawn is non-canonical for judges; see `docs/datahub-judge-quickstart.md`.
 
 ## Proof files
 
 | Mode | Path | Claim |
 |------|------|-------|
 | A | `examples/official-mcp-proof/read-only-retrieval-summary.json` | Deterministic recorded-response harness PASS |
-| B | `examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json` | Sanitized historical VERIFIED_LOCAL_ONLY summary |
+| B | `examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json` | Sanitized VERIFIED_LOCAL_ONLY summary (`metadata_call_count=1` on PASS) |
 
 ## Docs
 
@@ -54,9 +60,9 @@ Classification: OPTIONAL · VERIFIED_LOCAL_ONLY · NOT_PRODUCTION_ACTIVATION
 
 | Script | Role |
 |--------|------|
-| `scripts/datahub-judge-preflight.sh` | Zero-secrets environment/fixture presence check |
+| `scripts/datahub-judge-preflight.sh` | Environment/fixture presence check (+ optional GMS probe) |
 | `scripts/datahub-judge-demo.sh --mode=fixture` | Deterministic Mode A |
-| `scripts/datahub-judge-demo.sh --mode=local-oss` | Fail-closed Mode B gate |
+| `scripts/datahub-judge-demo.sh --mode=local-oss` | Fail-closed gate or real Mode B driver when allowed |
 
 ## Authority boundaries
 

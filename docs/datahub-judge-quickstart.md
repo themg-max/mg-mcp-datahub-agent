@@ -3,7 +3,8 @@
 Public repository: `themg-max/mg-mcp-datahub-agent`
 
 This quickstart is the default **deterministic judge experience (Mode A)** plus the optional
-fail-closed local-live path (Mode B). It requires no secrets and performs no DataHub writes.
+**local DataHub OSS official MCP** path (Mode B). Mode A requires no secrets and performs no
+DataHub writes. Mode B is operator-gated and fail-closed by default.
 
 ## Prerequisites
 
@@ -11,6 +12,7 @@ fail-closed local-live path (Mode B). It requires no secrets and performs no Dat
 - Node.js 20+
 - npm
 - Docker (optional; only if you operate a local DataHub OSS stack yourself)
+- `uvx` or Python with `mcp-server-datahub==0.6.0` (optional; Mode B — run official MCP over **HTTP**)
 - `jq` (optional; nicer proof inspection)
 
 ## Mode A — Deterministic (zero-secrets) [Default]
@@ -64,18 +66,35 @@ Expected:
 
 ### What Mode A does **not** claim
 
-- Live MCP tool invocation against a running server
+- Live MCP tool invocation against a running server (that is Mode B)
 - Production activation
 - Managed Cloud OAuth completion
 - DataHub or MG MCP writes
 
-## Mode B — Optional local DataHub OSS (fail-closed)
+## Mode B — Optional local DataHub OSS official MCP (fail-closed)
 
 Mode B is **OPTIONAL · VERIFIED_LOCAL_ONLY · NOT_PRODUCTION_ACTIVATION**.
+
+When explicitly allowed, the public package contacts the **official open-source**
+`mcp-server-datahub==0.6.0` over the **canonical HTTP JSON-RPC transport** against a
+**local** DataHub OSS GMS, discovers tools via `tools/list`, and performs **exactly one**
+read-only `tools/call` (prefer `search`).
+
+**Canonical validated transport (public live proof):**
+
+| Item | Value |
+|------|--------|
+| Official package | `mcp-server-datahub==0.6.0` |
+| Server transport | **HTTP** (`http-jsonrpc-stateless`) |
+| MCP URL | `http://127.0.0.1:8000/mcp` |
+| GMS | `http://localhost:8080` |
 
 A sanitized historical local-only proof is committed at:
 
 `examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json`
+
+That proof records `mcp_server.transport = http-jsonrpc-stateless` and
+`mcp_package_version = 0.6.0`.
 
 ### Fail-closed default (no MCP request)
 
@@ -89,15 +108,51 @@ Expected:
 - stdout contains `BLOCKED`
 - no MCP request is issued
 
-### Explicit allow (still no silent live contact in this public package)
+### Explicit allow — real local official MCP over HTTP (operator-owned stack)
 
 ```bash
+# 1) Run local DataHub OSS GMS (operator responsibility; quickstart/compose outside this repo)
+#    GMS expected at http://localhost:8080
+
+# 2) Start official MCP server on HTTP (separate terminal; pin 0.6.0)
+#    Server must listen so MCP URL http://127.0.0.1:8000/mcp is reachable.
+export DATAHUB_GMS_URL=http://localhost:8080
+export DATAHUB_GMS_TOKEN="<local-gms-token-placeholder>"
+uvx --from mcp-server-datahub==0.6.0 mcp-server-datahub --transport http
+
+# 3) Export local-only env for the judge harness (never commit tokens; never pass tokens on argv)
 export DATAHUB_LOCAL_MCP_ALLOW=true
+export DATAHUB_GMS_URL=http://localhost:8080
+export DATAHUB_GMS_TOKEN="<local-gms-token-placeholder>"
+# Canonical HTTP endpoint (demo script also defaults this when unset):
+export DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:8000/mcp
+
 ./scripts/datahub-judge-demo.sh --mode=local-oss
+jq . examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json
 ```
 
-The public package remains fail-closed for live contact in this release and points judges
-to the sanitized historical proof rather than inventing a live path.
+Expected on success:
+
+- exit code `0`
+- proof `status` = `PASS`
+- `runtime_retrieval_status` = `VERIFIED_LOCAL_ONLY`
+- `mcp_server.transport` = `http-jsonrpc-stateless`
+- `metadata_call_count` = `1`
+- `consumer_eligibility` = `PROPOSED`
+- `human_approval_required` = `true`
+- `production_activation` = `false`
+- `datahub_writes` = `false`
+- `managed_cloud_oauth` = `false`
+
+### Stdio spawn path (non-canonical)
+
+An alternate **stdio subprocess** spawn exists in the client for development only
+(`uvx --from mcp-server-datahub==0.6.0 mcp-server-datahub` without `--transport http`).
+That path is **not** the public judge contract: it is classified
+**KNOWN_NON_BLOCKING / non-canonical** and has timed out in judge-like environments.
+Do **not** omit `DATAHUB_LOCAL_MCP_URL` expecting stdio to reproduce the committed
+HTTP live proof. Credentials for any child process are passed only via environment —
+never on argv or in logs.
 
 ## Standard package validation
 
@@ -111,11 +166,14 @@ npm run demo
 ## Security and reproducibility notes
 
 - Mode A uses only committed fixtures and deterministic processing.
-- No production credentials, tokens, or JWTs are required or committed.
+- Mode B requires DATAHUB_LOCAL_MCP_ALLOW to be exactly the literal string `true`.
+- No production credentials, tokens, or JWTs are required or committed for Mode A.
+- Do not echo tokens; do not put tokens on CLI argv.
 - Private monorepo governance paths are not required to run Mode A.
 - Retrieval is not approval. Human approval remains mandatory.
+- Hackathon path uses **DataHub OSS** + official open-source MCP server — not a managed cloud tenant claim.
 
 ## If something fails
 
-Capture platform, Node/npm versions, commands run, full stdout/stderr, and open a
-reproducibility issue on this repository.
+Capture platform, Node/npm versions, commands run, full stdout/stderr (redact any tokens),
+and open a reproducibility issue on this repository.

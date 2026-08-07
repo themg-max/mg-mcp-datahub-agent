@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Public judge demo harness.
 # Mode A (default): deterministic fixture / recorded-response path.
-# Mode B (optional): local-oss — fail-closed unless DATAHUB_LOCAL_MCP_ALLOW=true.
+# Mode B (optional): local-oss — fail-closed unless DATAHUB_LOCAL_MCP_ALLOW=true,
+# then runs the real official MCP read-only driver (exactly one metadata tools/call).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,6 +17,11 @@ print_proof() {
   else
     sed -n '1,200p' "$path"
   fi
+}
+
+allow_is_true() {
+  # Require exact literal string 'true' for the operator allow gate.
+  [ "${DATAHUB_LOCAL_MCP_ALLOW-}" = "true" ]
 }
 
 if [ "$MODE" = "--mode=fixture" ]; then
@@ -47,21 +53,47 @@ if [ "$MODE" = "--mode=fixture" ]; then
 
 elif [ "$MODE" = "--mode=local-oss" ]; then
   echo "Running local-oss demo (Mode B) — requires DATAHUB_LOCAL_MCP_ALLOW=true"
-  if [ "${DATAHUB_LOCAL_MCP_ALLOW-}" != "true" ]; then
+  if ! allow_is_true; then
     echo "BLOCKED: DATAHUB_LOCAL_MCP_ALLOW != true — refusing to contact local MCP or DataHub."
     echo "No MCP request will be issued."
     echo "Historical sanitized proof (do not treat as re-run): examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json"
     echo "To allow optional local-oss validation when a local stack is ready: export DATAHUB_LOCAL_MCP_ALLOW=true"
+    echo "Canonical Mode B transport: HTTP MCP at DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:8000/mcp (GMS http://localhost:8080)"
     exit 3
   fi
 
-  # Public package does not ship a live MCP driver. With allow set, still refuse
-  # silent live contact and point operators at the historical sanitized proof.
-  echo "BLOCKED: public package has no live local-oss MCP driver in this release."
-  echo "DATAHUB_LOCAL_MCP_ALLOW=true was set, but no MCP request was issued."
-  echo "See sanitized VERIFIED_LOCAL_ONLY summary:"
-  echo "  examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json"
-  exit 3
+  # Allow gate passed — run the real official MCP local-oss driver.
+  # Canonical public path is HTTP JSON-RPC (matches committed VERIFIED_LOCAL_ONLY proof).
+  # Default MCP URL when unset so judges are not routed onto the non-canonical stdio spawn.
+  # Tokens must come from the process environment only (never argv, never echoed).
+  if [ -z "${DATAHUB_LOCAL_MCP_URL-}" ]; then
+    export DATAHUB_LOCAL_MCP_URL="http://127.0.0.1:8000/mcp"
+    echo "DATAHUB_LOCAL_MCP_URL unset — defaulting to canonical HTTP endpoint: $DATAHUB_LOCAL_MCP_URL"
+  else
+    echo "DATAHUB_LOCAL_MCP_URL=$DATAHUB_LOCAL_MCP_URL"
+  fi
+  echo "Mode B transport selection: HTTP JSON-RPC (stdio spawn is non-canonical for judges)"
+
+  if [ ! -d node_modules ]; then
+    echo "Installing dependencies (npm ci)"
+    npm ci
+  fi
+  npm run build
+
+  set +e
+  node dist/src/cli.js --mode=local-oss --write-local-oss-proof
+  code=$?
+  set -e
+
+  PROOF="examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json"
+  if [ -f "$PROOF" ]; then
+    echo "Local-oss proof present at $PROOF"
+    print_proof "$PROOF"
+  else
+    echo "Note: proof file not written (CLI may have blocked before write)."
+  fi
+
+  exit "$code"
 
 else
   echo "Unknown mode. Use --mode=fixture (default) or --mode=local-oss"

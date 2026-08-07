@@ -254,11 +254,32 @@ export const WORK_PACKET_SCHEMA_VERSION = 'datahub-mcp-readonly-work-packet/v1';
 export const DERIVATION_POLICY_VERSION = 'datahub-mcp-readonly-derivation/v1';
 
 export interface AuthorityClassification {
-  record_status: 'FIXTURE' | 'MCP_READONLY_RECORDED';
-  source_binding_status: 'LOCALLY_MATERIALIZED' | 'MCP_READONLY_RECORDED_LOCAL';
+  record_status: 'FIXTURE' | 'MCP_READONLY_RECORDED' | 'LOCAL_OSS_MCP_LIVE_READ';
+  source_binding_status:
+    | 'LOCALLY_MATERIALIZED'
+    | 'MCP_READONLY_RECORDED_LOCAL'
+    | 'LOCAL_OSS_MCP_VERIFIED';
   consumer_eligibility: 'PROPOSED';
-  runtime_retrieval_status: 'UNKNOWN';
+  runtime_retrieval_status: 'UNKNOWN' | 'VERIFIED_LOCAL_ONLY';
 }
+
+/**
+ * Authority for the local DataHub OSS live MCP read path.
+ * Distinct from the recorded harness — never mixed into fixture proofs.
+ */
+export type LocalOssAuthority = AuthorityClassification & {
+  record_status: 'LOCAL_OSS_MCP_LIVE_READ';
+  source_binding_status: 'LOCAL_OSS_MCP_VERIFIED';
+  consumer_eligibility: 'PROPOSED';
+  runtime_retrieval_status: 'VERIFIED_LOCAL_ONLY';
+};
+
+export const LOCAL_OSS_AUTHORITY: LocalOssAuthority = {
+  record_status: 'LOCAL_OSS_MCP_LIVE_READ',
+  source_binding_status: 'LOCAL_OSS_MCP_VERIFIED',
+  consumer_eligibility: 'PROPOSED',
+  runtime_retrieval_status: 'VERIFIED_LOCAL_ONLY',
+};
 
 export interface McpReadonlyNormalizedContextRecord {
   schema_version: typeof NORMALIZED_RECORD_SCHEMA_VERSION;
@@ -588,6 +609,178 @@ export interface ProofSummary {
   notes: string[];
 }
 
+/**
+ * Normalize a live local-OSS retrieval into a McpReadonlyNormalizedContextRecord
+ * with LOCAL_OSS_* authority. Allows empty schema/quality arrays when the selected
+ * read tool did not return those facets (remain ungrounded / empty).
+ */
+export function normalizeLocalOssRetrieval(
+  result: RetrievalResult,
+): McpReadonlyNormalizedRecordArtifact {
+  const authority: LocalOssAuthority = { ...LOCAL_OSS_AUTHORITY };
+  const withoutDigest: Omit<McpReadonlyNormalizedContextRecord, 'digests'> & {
+    digests: Omit<McpReadonlyNormalizedContextRecord['digests'], 'normalized_record_digest'> & {
+      normalized_record_digest?: string;
+    };
+  } = {
+    schema_version: NORMALIZED_RECORD_SCHEMA_VERSION,
+    derivation_policy_version: DERIVATION_POLICY_VERSION,
+    retrieval_mode: result.mode,
+    authority,
+    source: result.source,
+    tool: result.tool,
+    attribution: result.attribution,
+    provenance: result.provenance,
+    data: {
+      dataset_urn: result.content.dataset_urn,
+      platform: result.content.platform,
+      name: result.content.name,
+      description: result.content.description,
+      ownership: { ...result.content.ownership },
+      schema: {
+        fields: result.content.schema.fields.map((field) => ({ ...field })),
+      },
+      upstream_lineage: result.content.upstream_lineage.map((edge) => ({ ...edge })),
+      governance_labels: { ...result.content.governance_labels },
+      quality_assertions: result.content.quality_assertions.map((assertion) => ({
+        ...assertion,
+      })),
+    },
+    digests: {
+      content_digest: result.content_digest,
+      envelope_digest: result.envelope_digest,
+    },
+    identities: {
+      fixture_or_source_packet_id: `local-oss-mcp:datahub:${normalizePlatform(
+        result.content.platform,
+      )}:${result.content_digest}`,
+      proposed_mg_packet_id:
+        'PROPOSED:packet:mg-mcp:datahub-oss-local-mcp-readonly:20260806:0001',
+      runtime_packet_id: null,
+    },
+  };
+
+  const draftText = stableJsonStringify(withoutDigest);
+  const normalized_record_digest = sha256Hex(draftText);
+  const record: McpReadonlyNormalizedContextRecord = {
+    ...withoutDigest,
+    digests: {
+      content_digest: result.content_digest,
+      envelope_digest: result.envelope_digest,
+      normalized_record_digest,
+    },
+  };
+  const text = stableJsonStringify(record);
+  return {
+    record,
+    text,
+    sha256: sha256Hex(text),
+  };
+}
+
+/**
+ * Build a WorkPacket for the local OSS live path with blocked production actions.
+ */
+export function buildLocalOssWorkPacket(
+  record: McpReadonlyNormalizedContextRecord,
+): McpReadonlyWorkPacketArtifact {
+  const requiredFieldNames = record.data.schema.fields
+    .filter((field) => field.required)
+    .map((field) => field.name);
+
+  const packetWithoutDigest: Omit<McpReadonlyWorkPacket, 'digests'> & {
+    digests: Omit<McpReadonlyWorkPacket['digests'], 'packet_content_digest'> & {
+      packet_content_digest?: string;
+    };
+  } = {
+    packet_type: 'datahub_mcp_readonly_work_packet',
+    schema_version: WORK_PACKET_SCHEMA_VERSION,
+    derivation_policy_version: DERIVATION_POLICY_VERSION,
+    objective:
+      'Validate one live local DataHub OSS official MCP read-only retrieval: discover tools/list, execute exactly one read-only metadata tool, normalize attributable entity metadata into a governed WorkPacket. Local verification is not production activation.',
+    human_approval_required: true,
+    retrieval: {
+      mode: record.retrieval_mode,
+      source_identity: record.source.identity,
+      tool_identity: record.tool.identity,
+      attribution: { ...record.attribution },
+      provenance: { ...record.provenance },
+      content_digest: record.digests.content_digest,
+      response_path: record.provenance.response_path ?? 'UNKNOWN',
+    },
+    authority: { ...LOCAL_OSS_AUTHORITY },
+    normalized_context: {
+      dataset_urn: record.data.dataset_urn,
+      platform: record.data.platform,
+      name: record.data.name,
+      description: record.data.description,
+      ownership: { ...record.data.ownership },
+      schema_field_names: record.data.schema.fields.map((field) => field.name),
+      required_field_names: requiredFieldNames,
+      upstream_dataset_urns: record.data.upstream_lineage.map((edge) => edge.dataset_urn),
+      sensitivity: record.data.governance_labels.sensitivity,
+      quality_assertion_types: record.data.quality_assertions.map(
+        (assertion) => assertion.type,
+      ),
+    },
+    digests: {
+      content_digest: record.digests.content_digest,
+      normalized_record_digest: record.digests.normalized_record_digest,
+    },
+    allowed_actions: [
+      'inspect_local_oss_mcp_readonly_response',
+      'normalize_context_record',
+      'generate_work_packet',
+      'emit_local_oss_proof_summary',
+    ],
+    blocked_actions: [
+      'datahub_write',
+      'mg_mcp_write',
+      'deployment',
+      'iam_mutation',
+      'secret_materialization',
+      'autonomous_github_merge',
+      'autonomous_github_mutation',
+      'production_activation',
+      'oauth_bootstrap',
+      'resolver_changes',
+      'live_network_mcp_without_authorization',
+    ],
+    validation_commands: [
+      'npm run typecheck',
+      'npm test',
+      'npm run build',
+      'git diff --check',
+    ],
+    stop_condition:
+      'Stop after one successful attributable local OSS MCP read-only proof or one documented blocker. Do not perform another metadata read, mutation tool, cloud OAuth work, or merge.',
+    unknowns: [
+      'approved metadata freshness window remains UNKNOWN',
+      'schema/ownership/lineage/quality facets absent from the single selected read remain UNKNOWN',
+      'local OSS verification is not production/runtime activation',
+      'approved consumers beyond PROPOSED eligibility',
+    ],
+  };
+
+  const draftText = stableJsonStringify(packetWithoutDigest);
+  const packet_content_digest = sha256Hex(draftText);
+  const packet: McpReadonlyWorkPacket = {
+    ...packetWithoutDigest,
+    human_approval_required: true,
+    digests: {
+      content_digest: record.digests.content_digest,
+      normalized_record_digest: record.digests.normalized_record_digest,
+      packet_content_digest,
+    },
+  };
+  const text = stableJsonStringify(packet);
+  return {
+    packet,
+    text,
+    artifact_sha256: sha256Hex(text),
+  };
+}
+
 export function buildProofSummary(result: PipelineResult): ProofSummary {
   const errors: string[] = [];
   if (result.workPacket.packet.human_approval_required !== true) {
@@ -596,6 +789,7 @@ export function buildProofSummary(result: PipelineResult): ProofSummary {
   if (result.normalized.record.authority.consumer_eligibility !== 'PROPOSED') {
     errors.push('consumer_eligibility must remain PROPOSED');
   }
+  // Mode A recorded/fixture path must keep runtime_retrieval_status UNKNOWN.
   if (result.normalized.record.authority.runtime_retrieval_status !== 'UNKNOWN') {
     errors.push('runtime_retrieval_status must remain UNKNOWN in this slice');
   }

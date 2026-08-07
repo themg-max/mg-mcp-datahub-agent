@@ -127,7 +127,7 @@
       "durable_branch": "feature/datahub-public-submission-sync-v1",
       "owner": "vscode-orchestrator",
       "artifact": "docs/competition/datahub-judge-submission-index.md",
-      "note": "Public-safe sync of frozen judge/demo submission packaging derived from internal freeze merge 0a25a551fa2ef828956dd6052da284ff2707faf2. Docs/scripts/proof packaging only. No runtime feature expansion, live DataHub read, DataHub write, OAuth/IAM/deploy, or Devpost mutation.",
+      "note": "SUPERSEDED for live local-oss MCP driver by datahub-public-live-local-oss-readonly-v1. Original scope: public-safe sync of frozen judge/demo submission packaging derived from internal freeze merge 0a25a551fa2ef828956dd6052da284ff2707faf2. Docs/scripts/proof packaging only. No DataHub write, OAuth/IAM/deploy, or Devpost mutation.",
       "allowed_paths": [
         ".ai/active-lanes/datahub-devpost.json",
         "README.md",
@@ -139,6 +139,35 @@
         "scripts/datahub-judge-preflight.sh",
         "scripts/datahub-judge-demo.sh",
         "examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json"
+      ]
+    },
+    {
+      "id": "datahub-public-live-local-oss-readonly-v1",
+      "status": "APPROVED",
+      "durable_branch": "feature/datahub-public-live-local-oss-readonly-v1",
+      "owner": "vscode-orchestrator",
+      "artifact": "examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json",
+      "note": "Ports previously verified local-only official mcp-server-datahub read-only judge path. Exactly one live metadata read when allowed. No writes, no Cloud/OAuth, no production activation. consumer remains PROPOSED.",
+      "allowed_paths": [
+        ".ai/active-lanes/datahub-devpost.json",
+        "src/datahub/local-oss-mcp-client.ts",
+        "src/datahub/local-oss-validation.ts",
+        "src/datahub/context-adapter.ts",
+        "src/cli.ts",
+        "scripts/datahub-judge-demo.sh",
+        "scripts/datahub-judge-preflight.sh",
+        "tests/datahub-mcp-local-readonly.test.ts",
+        "tests/datahub-mcp-readonly.test.ts",
+        "docs/datahub-judge-quickstart.md",
+        "docs/datahub-mcp-readonly-demo.md",
+        "docs/competition/datahub-judge-submission-index.md",
+        "docs/competition/evidence-index.md",
+        "docs/competition/public-demo-notes.md",
+        "docs/competition/baseline-new-work-disclosure.md",
+        "README.md",
+        "examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json",
+        "package.json",
+        "package-lock.json"
       ]
     }
   ]
