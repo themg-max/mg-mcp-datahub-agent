@@ -144,7 +144,9 @@ tests/
 ```
 
 ## Example work packet
-A deterministic example is committed at `fixtures/datahub-context.json`.
+Generated output: `examples/generated-work-packet/work-packet.json`
+
+Input fixture: `fixtures/datahub-context.json`
 
 ## Trust and authority model
 - Authority states: `approved`, `planning_only`, `quarantined`, `unknown`.
@@ -198,7 +200,7 @@ The next phase is official DataHub MCP integration in PR #2 of this public repos
 ## Competition Evidence
 - Competition: Build with DataHub: The Agent Hackathon
 - Baseline (pre-existing): MG MCP governance and architecture existed prior to this public adapter
-- New public work: This TypeScript DataHub adapter and deterministic work-packet generator
+- New public work: hardened deterministic WorkPacket generation and provenance/authority contracts; the public adapter, proofs, and judge packaging were created or hardened during the competition and are packaged here as public-safe evidence.
 - AI contribution: Copilot coding agent assisted in edits; human reviewers scoped, approved, and validated the public reference implementation and the no-write, fixture-first demo boundary
 - Validation carried out: `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, `npm run demo:json` (JSON parse validation), security scan
 - Pull request: Draft PR #1 on branch `copilot/initial-implementation`
