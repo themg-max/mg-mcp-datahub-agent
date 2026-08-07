@@ -42,20 +42,31 @@ else
   echo "DATAHUB_LOCAL_MCP_ALLOW is not set — local-oss mode remains fail-closed (default)"
 fi
 
-# Optional non-fatal GMS health probe (never prints tokens).
+# Optional non-fatal GMS / HTTP MCP probes (never prints tokens).
 GMS_URL="${DATAHUB_GMS_URL:-http://localhost:8080}"
+MCP_URL="${DATAHUB_LOCAL_MCP_URL:-http://127.0.0.1:8000/mcp}"
 if command -v curl >/dev/null 2>&1; then
   if curl -fsS --max-time 2 "${GMS_URL%/}/health" >/dev/null 2>&1 \
     || curl -fsS --max-time 2 "${GMS_URL%/}/" >/dev/null 2>&1; then
     echo "optional GMS probe: reachable at configured/default local URL (token not used)"
   else
-    echo "optional GMS probe: not reachable (OK for Mode A; required only for live Mode B spawn path)"
+    echo "optional GMS probe: not reachable (OK for Mode A; required only for live Mode B)"
+  fi
+  if curl -fsS --max-time 2 -o /dev/null -w '' "$MCP_URL" >/dev/null 2>&1 \
+    || curl -fsS --max-time 2 -o /dev/null -w '' -X POST \
+      -H 'Content-Type: application/json' \
+      -d '{}' "$MCP_URL" >/dev/null 2>&1; then
+    echo "optional HTTP MCP probe: endpoint responds at ${MCP_URL} (body not inspected)"
+  else
+    echo "optional HTTP MCP probe: ${MCP_URL} not reachable (OK for Mode A; required for live Mode B HTTP path)"
   fi
 else
-  echo "optional GMS probe: curl missing (skipped)"
+  echo "optional GMS/MCP probes: curl missing (skipped)"
 fi
 
-echo "Mode B tip: pin official server with uvx --from mcp-server-datahub==0.6.0 (optional)"
+echo "Mode B canonical transport: HTTP mcp-server-datahub==0.6.0 at DATAHUB_LOCAL_MCP_URL=${MCP_URL}"
+echo "Mode B tip: uvx --from mcp-server-datahub==0.6.0 mcp-server-datahub --transport http"
+echo "Mode B note: stdio spawn without HTTP URL is non-canonical for public judges"
 
 if [ "$missing" -ne 0 ]; then
   echo "PREFLIGHT FAIL"

@@ -29,6 +29,7 @@ already-merged public recorded-response harness (PR #25).
 - Optional local DataHub OSS official MCP read-only driver (Mode B):
   - `src/datahub/local-oss-mcp-client.ts` / `local-oss-validation.ts`
   - pinned `mcp-server-datahub==0.6.0`, allow gate, exactly one metadata read
+  - canonical judge transport: HTTP at `http://127.0.0.1:8000/mcp` (GMS `http://localhost:8080`)
   - focused tests in `tests/datahub-mcp-local-readonly.test.ts`
 - Explicit baseline/new-work and limitation statements in README.
 

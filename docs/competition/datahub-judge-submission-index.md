@@ -32,9 +32,11 @@ env -u DATAHUB_LOCAL_MCP_ALLOW ./scripts/datahub-judge-demo.sh --mode=local-oss
 
 Expected: exit `3`, `BLOCKED`, no MCP request.
 
-With allow + operator-owned local OSS GMS + official `mcp-server-datahub==0.6.0`, Mode B
-performs initialize → tools/list → **exactly one** read-only tools/call and writes a
-sanitized proof. Classification: OPTIONAL · VERIFIED_LOCAL_ONLY · NOT_PRODUCTION_ACTIVATION
+With allow + operator-owned local OSS GMS + official `mcp-server-datahub==0.6.0` over
+**HTTP** (`DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:8000/mcp`, GMS `http://localhost:8080`),
+Mode B performs initialize → tools/list → **exactly one** read-only tools/call and writes a
+sanitized proof. Classification: OPTIONAL · VERIFIED_LOCAL_ONLY · NOT_PRODUCTION_ACTIVATION.
+Stdio spawn is non-canonical for judges; see `docs/datahub-judge-quickstart.md`.
 
 ## Proof files
 

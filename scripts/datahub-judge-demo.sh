@@ -59,11 +59,22 @@ elif [ "$MODE" = "--mode=local-oss" ]; then
     echo "No MCP request will be issued."
     echo "Historical sanitized proof (do not treat as re-run): examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json"
     echo "To allow optional local-oss validation when a local stack is ready: export DATAHUB_LOCAL_MCP_ALLOW=true"
+    echo "Canonical Mode B transport: HTTP MCP at DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:8000/mcp (GMS http://localhost:8080)"
     exit 3
   fi
 
   # Allow gate passed — run the real official MCP local-oss driver.
+  # Canonical public path is HTTP JSON-RPC (matches committed VERIFIED_LOCAL_ONLY proof).
+  # Default MCP URL when unset so judges are not routed onto the non-canonical stdio spawn.
   # Tokens must come from the process environment only (never argv, never echoed).
+  if [ -z "${DATAHUB_LOCAL_MCP_URL-}" ]; then
+    export DATAHUB_LOCAL_MCP_URL="http://127.0.0.1:8000/mcp"
+    echo "DATAHUB_LOCAL_MCP_URL unset — defaulting to canonical HTTP endpoint: $DATAHUB_LOCAL_MCP_URL"
+  else
+    echo "DATAHUB_LOCAL_MCP_URL=$DATAHUB_LOCAL_MCP_URL"
+  fi
+  echo "Mode B transport selection: HTTP JSON-RPC (stdio spawn is non-canonical for judges)"
+
   if [ ! -d node_modules ]; then
     echo "Installing dependencies (npm ci)"
     npm ci

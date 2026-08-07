@@ -38,16 +38,26 @@ jq . examples/official-mcp-proof/read-only-retrieval-summary.json
 ```
 
 Optional Mode B is fail-closed unless explicitly allowed. With allow + local OSS GMS +
-official MCP, it performs exactly one live read-only metadata call (not production activation):
+official MCP over **HTTP**, it performs exactly one live read-only metadata call
+(not production activation). Canonical transport matches the committed live proof:
+
+- package: `mcp-server-datahub==0.6.0`
+- transport: HTTP JSON-RPC (`http-jsonrpc-stateless`)
+- MCP URL: `http://127.0.0.1:8000/mcp`
+- GMS: `http://localhost:8080`
 
 ```bash
 env -u DATAHUB_LOCAL_MCP_ALLOW ./scripts/datahub-judge-demo.sh --mode=local-oss
 # expected: exit 3, BLOCKED, no MCP request
 
 # Optional live path (operator-owned local stack; placeholders only):
+# 1) GMS at http://localhost:8080
+# 2) uvx --from mcp-server-datahub==0.6.0 mcp-server-datahub --transport http
+# 3) then:
 # export DATAHUB_LOCAL_MCP_ALLOW=true
 # export DATAHUB_GMS_URL=http://localhost:8080
 # export DATAHUB_GMS_TOKEN="<local-token>"
+# export DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:8000/mcp
 # ./scripts/datahub-judge-demo.sh --mode=local-oss
 ```
 

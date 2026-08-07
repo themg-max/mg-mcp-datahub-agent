@@ -59,12 +59,18 @@ Mode B flags:
 
 Mode B environment (never pass secrets on argv; placeholders only):
   DATAHUB_LOCAL_MCP_ALLOW=true          Required exact allow gate (case-insensitive true)
-  DATAHUB_GMS_URL=http://localhost:8080 Local GMS base URL (spawn path)
-  DATAHUB_GMS_TOKEN=<local-token>       Local GMS token via env only (never logged)
-  DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:<port>/mcp
-                                        Optional HTTP MCP endpoint (localhost only)
+  DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:8000/mcp
+                                        Canonical HTTP MCP endpoint (localhost only).
+                                        Prefer this path; matches public live proof transport.
+                                        Judge demo script defaults this URL when unset.
+  DATAHUB_GMS_URL=http://localhost:8080 Local GMS base URL (required for stdio spawn only)
+  DATAHUB_GMS_TOKEN=<local-token>       Local GMS token via env only (never logged; spawn path)
   DATAHUB_MCP_READONLY_TOOL=search      Optional tool override (must be readOnlyHint=true)
   DATAHUB_MCP_READONLY_ARGS_JSON={}     Optional tool args JSON
+
+  Canonical Mode B: official mcp-server-datahub==0.6.0 with --transport http,
+  MCP URL http://127.0.0.1:8000/mcp, GMS http://localhost:8080.
+  Stdio subprocess spawn is non-canonical for public judges.
 
 Safety:
   - Exactly one metadata tools/call on the live path

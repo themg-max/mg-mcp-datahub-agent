@@ -37,10 +37,12 @@ the fail-closed local-live gate.
 
    Expected: exit 3, `BLOCKED`, no MCP request.
 
-   Video contract (optional live cut): **DataHub OSS → official mcp-server-datahub →
+   Video contract (optional live cut): **DataHub OSS GMS → official
+   mcp-server-datahub==0.6.0 over HTTP (`http://127.0.0.1:8000/mcp`) →
    one read-only tools/call → governed WorkPacket** with
    `consumer_eligibility=PROPOSED` and `human_approval_required=true`. Point to
    sanitized VERIFIED_LOCAL_ONLY summary when the stack is not running.
+   Stdio spawn is non-canonical for judges.
 
 5. **Close (20s)**  
    Baseline vs competition work is disclosed. Production activation and writes

@@ -12,7 +12,7 @@ DataHub writes. Mode B is operator-gated and fail-closed by default.
 - Node.js 20+
 - npm
 - Docker (optional; only if you operate a local DataHub OSS stack yourself)
-- `uvx` or Python with `mcp-server-datahub==0.6.0` (optional; Mode B spawn path)
+- `uvx` or Python with `mcp-server-datahub==0.6.0` (optional; Mode B — run official MCP over **HTTP**)
 - `jq` (optional; nicer proof inspection)
 
 ## Mode A — Deterministic (zero-secrets) [Default]
@@ -75,13 +75,26 @@ Expected:
 
 Mode B is **OPTIONAL · VERIFIED_LOCAL_ONLY · NOT_PRODUCTION_ACTIVATION**.
 
-When explicitly allowed, the public package can spawn or contact the **official open-source**
-`mcp-server-datahub==0.6.0` against a **local** DataHub OSS GMS, discover tools via
-`tools/list`, and perform **exactly one** read-only `tools/call` (prefer `search`).
+When explicitly allowed, the public package contacts the **official open-source**
+`mcp-server-datahub==0.6.0` over the **canonical HTTP JSON-RPC transport** against a
+**local** DataHub OSS GMS, discovers tools via `tools/list`, and performs **exactly one**
+read-only `tools/call` (prefer `search`).
+
+**Canonical validated transport (public live proof):**
+
+| Item | Value |
+|------|--------|
+| Official package | `mcp-server-datahub==0.6.0` |
+| Server transport | **HTTP** (`http-jsonrpc-stateless`) |
+| MCP URL | `http://127.0.0.1:8000/mcp` |
+| GMS | `http://localhost:8080` |
 
 A sanitized historical local-only proof is committed at:
 
 `examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json`
+
+That proof records `mcp_server.transport = http-jsonrpc-stateless` and
+`mcp_package_version = 0.6.0`.
 
 ### Fail-closed default (no MCP request)
 
@@ -95,17 +108,25 @@ Expected:
 - stdout contains `BLOCKED`
 - no MCP request is issued
 
-### Explicit allow — real local official MCP (operator-owned stack)
+### Explicit allow — real local official MCP over HTTP (operator-owned stack)
 
 ```bash
-# 1) Run local DataHub OSS (operator responsibility; quickstart/compose outside this repo)
-# 2) Export local-only env (never commit tokens; never pass tokens on argv)
+# 1) Run local DataHub OSS GMS (operator responsibility; quickstart/compose outside this repo)
+#    GMS expected at http://localhost:8080
+
+# 2) Start official MCP server on HTTP (separate terminal; pin 0.6.0)
+#    Server must listen so MCP URL http://127.0.0.1:8000/mcp is reachable.
+export DATAHUB_GMS_URL=http://localhost:8080
+export DATAHUB_GMS_TOKEN="<local-gms-token-placeholder>"
+uvx --from mcp-server-datahub==0.6.0 mcp-server-datahub --transport http
+# equivalent: python3 -m mcp_server_datahub --transport http
+
+# 3) Export local-only env for the judge harness (never commit tokens; never pass tokens on argv)
 export DATAHUB_LOCAL_MCP_ALLOW=true
 export DATAHUB_GMS_URL=http://localhost:8080
 export DATAHUB_GMS_TOKEN="<local-gms-token-placeholder>"
-
-# Optional: talk to an already-running local HTTP MCP instead of spawning:
-# export DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:8000/mcp
+# Canonical HTTP endpoint (demo script also defaults this when unset):
+export DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:8000/mcp
 
 ./scripts/datahub-judge-demo.sh --mode=local-oss
 jq . examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json
@@ -116,6 +137,7 @@ Expected on success:
 - exit code `0`
 - proof `status` = `PASS`
 - `runtime_retrieval_status` = `VERIFIED_LOCAL_ONLY`
+- `mcp_server.transport` = `http-jsonrpc-stateless`
 - `metadata_call_count` = `1`
 - `consumer_eligibility` = `PROPOSED`
 - `human_approval_required` = `true`
@@ -123,9 +145,15 @@ Expected on success:
 - `datahub_writes` = `false`
 - `managed_cloud_oauth` = `false`
 
-Spawn path uses (in order): `uvx --from mcp-server-datahub==0.6.0 mcp-server-datahub`,
-else `python3 -m mcp_server_datahub`, else `mcp-server-datahub` on PATH. Credentials are
-passed only via process environment to the child — never on argv or in logs.
+### Stdio spawn path (non-canonical)
+
+An alternate **stdio subprocess** spawn exists in the client for development only
+(`uvx --from mcp-server-datahub==0.6.0 mcp-server-datahub` without `--transport http`).
+That path is **not** the public judge contract: it is classified
+**KNOWN_NON_BLOCKING / non-canonical** and has timed out in judge-like environments.
+Do **not** omit `DATAHUB_LOCAL_MCP_URL` expecting stdio to reproduce the committed
+HTTP live proof. Credentials for any child process are passed only via environment —
+never on argv or in logs.
 
 ## Standard package validation
 
