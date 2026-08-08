@@ -23,40 +23,69 @@ DataHub writes. Mode B is operator-gated and fail-closed by default.
 - `jq` (optional; nicer proof inspection)
 - `sqlite3` (optional; offline generated-artifact validation)
 
+## Shell copy warning (read first)
+
+Copy commands from **raw fenced code blocks only**. Do **not** paste escaped Markdown
+from rendered previews or chat surfaces. Escaped forms break shells and env names, for
+example:
+
+- `\#` instead of `#`
+- `http\://` instead of `http://`
+- `DATAHUB\_...` instead of `DATAHUB_...`
+- doubled backslashes (`\\`) that were only Markdown escapes
+
+If a paste contains backslash-escapes before `#`, `:`, `_`, or path separators, discard it
+and re-copy from the raw source of this file.
+
 ## Mode A — Deterministic (zero-secrets) [Default]
 
-1. Clone and enter the repository:
+**No live MCP connection or official tool invocation occurs in Mode A.**
+
+1. Fresh clone into an explicit judge path (avoids stale checkouts):
 
    ```bash
-   git clone https://github.com/themg-max/mg-mcp-datahub-agent.git
-   cd mg-mcp-datahub-agent
+   rm -rf /tmp/mg-mcp-datahub-agent-judge
+   git clone https://github.com/themg-max/mg-mcp-datahub-agent.git /tmp/mg-mcp-datahub-agent-judge
+   cd /tmp/mg-mcp-datahub-agent-judge
    ```
 
-2. Install dependencies:
+2. Immediately verify the checkout (branch tip, clean tree, required artifact):
+
+   ```bash
+   git branch --show-current
+   git rev-parse HEAD
+   git status --short
+   test -f examples/showcase-ecommerce/customer-email-normalization/generation-proof.json
+   ```
+
+   Expected: branch `main` (or the ref you intentionally checked out), a 40-character
+   `HEAD` SHA, empty `git status --short`, and exit code `0` from `test -f`.
+
+3. Install dependencies:
 
    ```bash
    npm ci
    ```
 
-3. Preflight:
+4. Preflight:
 
    ```bash
    ./scripts/datahub-judge-preflight.sh
    ```
 
-4. Run the deterministic demo (fixture / recorded-response harness):
+5. Run the deterministic demo (fixture / recorded-response harness):
 
    ```bash
    ./scripts/datahub-judge-demo.sh --mode=fixture
    ```
 
-5. Inspect the Mode A proof:
+6. Inspect the Mode A proof:
 
    ```bash
    jq . examples/official-mcp-proof/read-only-retrieval-summary.json
    ```
 
-6. Inspect the generated development example:
+7. Inspect the generated development example:
 
    ```bash
    ls examples/showcase-ecommerce/customer-email-normalization/
@@ -86,7 +115,7 @@ Expected:
 
 ### What Mode A does **not** claim
 
-- Live MCP tool invocation against a running server (that is Mode B)
+- No live MCP connection or official tool invocation occurs in Mode A (live path is Mode B)
 - Production activation
 - Managed Cloud OAuth completion
 - DataHub or MG MCP writes
