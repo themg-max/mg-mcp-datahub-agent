@@ -1,0 +1,75 @@
+{
+  "artifact_class": "judge-visible-generated-development-example",
+  "artifact_id": "showcase-ecommerce-customer-email-normalization-v1",
+  "input_context": {
+    "logical_dataset": "showcase-ecommerce",
+    "scenario_key": "safe-customer-email-migration",
+    "fixture_paths": [
+      "docs/fixtures/showcase-ecommerce/fixture-manifest.yaml",
+      "docs/fixtures/showcase-ecommerce/scenario-safe-customer-email-migration.yaml",
+      "docs/fixtures/showcase-ecommerce/expected-context-summary.yaml",
+      "docs/fixtures/showcase-ecommerce/expected-proof-summary.yaml",
+      "fixtures/datahub-context.json"
+    ],
+    "note": "Committed public fixture contract identity. Field bindings in the planning fixture remain partially UNKNOWN; this example uses explicit synthetic sample rows for offline demonstration only."
+  },
+  "input_classification": "SYNTHETIC_FIXTURE",
+  "source_identity": "repository-fixture:showcase-ecommerce",
+  "authority_state": "planning_only",
+  "allowed_scope": [
+    "examples/showcase-ecommerce/customer-email-normalization/README.md",
+    "examples/showcase-ecommerce/customer-email-normalization/customer_email_normalized.sql",
+    "examples/showcase-ecommerce/customer-email-normalization/schema.yml",
+    "examples/showcase-ecommerce/customer-email-normalization/validate_customer_email.sql",
+    "examples/showcase-ecommerce/customer-email-normalization/generation-proof.json"
+  ],
+  "blocked_scope": [
+    "DataHub writes",
+    "MG MCP writes",
+    "production migration execution",
+    "UPDATE/DELETE/DROP against any live database",
+    "deployment",
+    "IAM or secret mutation",
+    "autonomous merge",
+    "use of Mode B live PowerBI entity as schema authority for this example"
+  ],
+  "unknowns": [
+    "official contest datapack executable entity URNs remain UNKNOWN in fixture-manifest",
+    "production freshness window UNKNOWN",
+    "no approved authority to execute SQL outside offline synthetic validation"
+  ],
+  "generated_files": [
+    "README.md",
+    "customer_email_normalized.sql",
+    "schema.yml",
+    "validate_customer_email.sql",
+    "generation-proof.json"
+  ],
+  "validation_results": {
+    "method": "sqlite3 :memory: < validate_customer_email.sql",
+    "destructive_operations": false,
+    "checks": [
+      { "name": "customer_id_preserved", "expected": "PASS" },
+      { "name": "raw_email_retained", "expected": "PASS" },
+      { "name": "trim_lowercase_normalization", "expected": "PASS" },
+      { "name": "null_blank_validation", "expected": "PASS" },
+      { "name": "duplicate_detection", "expected": "PASS" },
+      { "name": "overall_validation_status", "expected": "PASS" }
+    ],
+    "recorded_overall_status": "PASS",
+    "recorded_at": "2026-08-08T08:45:00.000Z"
+  },
+  "consumer_eligibility": "PROPOSED",
+  "human_approval_required": true,
+  "production_write": false,
+  "deployment_authorized": false,
+  "datahub_write": false,
+  "live_mcp_provenance": false,
+  "mode_b_entity_used_as_schema_input": false,
+  "notes": [
+    "Exactly one judge-facing generated development artifact for final publication.",
+    "Input classification is SYNTHETIC_FIXTURE with repository provenance under docs/fixtures/showcase-ecommerce/.",
+    "Do not imply the live retrieved PowerBI dataset supplied schema for this customer-email example.",
+    "Generation is not approval; human review remains mandatory."
+  ]
+}

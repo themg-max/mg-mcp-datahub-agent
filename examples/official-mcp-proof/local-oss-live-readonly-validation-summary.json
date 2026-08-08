@@ -6,13 +6,13 @@
     "runtime_retrieval_status": "VERIFIED_LOCAL_ONLY",
     "source_binding_status": "LOCAL_OSS_MCP_VERIFIED"
   },
-  "captured_at": "2026-08-07T17:27:03.313Z",
+  "captured_at": "2026-08-07T19:08:09.544Z",
   "datahub_writes": false,
   "digests": {
-    "artifact_sha256": "d8e66b98cf65b29bed53dd41eec42a368ff0c036e0f1f480793eb0cdf7457a1b",
+    "artifact_sha256": "6569cda449fd94516c95de0f60391a178258bdb62485fa20ff9c7efd114de032",
     "content_digest": "7dc93e79a702254570cae993eed9d7ab832d7cead6c6c07086b7ef5b59606ccb",
-    "normalized_record_digest": "852d53743fa8bd14ada24b3e8349689e3338319494a8a47059a7da6a06d99a8b",
-    "packet_content_digest": "d9f1e75b0cb89dafd82c7c258dc2ef9deb48354b0ebd70c14a288682062bdb88"
+    "normalized_record_digest": "d22ef44e612dfd85ec691b812c95a538c00b3d23198b92ae935021b3d2fa3adf",
+    "packet_content_digest": "16109aaab601ca5db174b2c4761982a1f388d36f5f4649faa806478b3b742eaa"
   },
   "environment": {
     "compose_project": "datahub",
@@ -61,7 +61,7 @@
       "num_results": 5,
       "query": "dataset"
     },
-    "timestamp": "2026-08-07T17:27:03.963Z"
+    "timestamp": "2026-08-07T19:08:10.642Z"
   },
   "status": "PASS",
   "tool_inventory": {

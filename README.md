@@ -10,22 +10,33 @@ AI agents can fail when context is stale, conflicting, untrusted, too broad, or 
 - Normalizes DataHub-shaped metadata into source-neutral context records.
 - Builds a deterministic work packet with allowed scope, blocked scope, validation, and unknowns.
 - Prints valid JSON for human review.
+- Packages one judge-visible generated development example under `examples/showcase-ecommerce/customer-email-normalization/`.
 
-Generated packets are proposals only. They are never approval, deployment authority, or a write-back mechanism.
+Generated packets and generated code examples are proposals only. They are never approval, deployment authority, or a write-back mechanism.
 
 ## DataHub usage
-- Default path consumes **synthetic / recorded** DataHub-shaped metadata (fixtures) — Mode A.
-- Optional Mode B can run a **local DataHub OSS** stack with the official open-source
-  `mcp-server-datahub==0.6.0` for exactly one read-only metadata `tools/call` when the operator
-  explicitly allows it. Mode B requires DATAHUB_LOCAL_MCP_ALLOW to be exactly the literal
-  string `true` (fail-closed otherwise).
+- **Mode A (default):** deterministic fixture / recorded-response harness. Zero secrets.
+  `runtime_retrieval_status=UNKNOWN`. No live MCP invocation claim.
+- **Mode B (optional, verified on public main against local DataHub OSS):** the public
+  implementation was verified against local DataHub OSS using the official
+  `mcp-server-datahub==0.6.0` server over HTTP. The validation discovered the live MCP
+  tool inventory, selected a server-annotated read-only tool, executed exactly one
+  attributable metadata retrieval, and preserved downstream authority as `PROPOSED`.
+  Mode B requires `DATAHUB_LOCAL_MCP_ALLOW` to be exactly the literal string `true`
+  (fail-closed otherwise). Classification: `VERIFIED_LOCAL_ONLY`.
 - No DataHub writes, no managed Cloud OAuth, and no production activation are claimed.
+
+### Runtime classification (explicit)
+
+| Mode | Runtime status | Live invocation |
+|------|----------------|-----------------|
+| A | `MODE_A_RUNTIME=UNKNOWN` | No |
+| B | `MODE_B_RUNTIME=VERIFIED_LOCAL_ONLY` | Exactly one read-only `tools/call` when allowed |
 
 ## Why governed context matters
 - Planning-only evidence should not authorize implementation.
 - Quarantined evidence should stay out of authority decisions.
 - Unknown dependencies should fail closed instead of being guessed.
-
 
 ## Judge path (deterministic)
 
@@ -38,6 +49,14 @@ npm ci
 jq . examples/official-mcp-proof/read-only-retrieval-summary.json
 ```
 
+Inspect the generated development example:
+
+```bash
+ls examples/showcase-ecommerce/customer-email-normalization/
+jq . examples/showcase-ecommerce/customer-email-normalization/generation-proof.json
+sqlite3 :memory: < examples/showcase-ecommerce/customer-email-normalization/validate_customer_email.sql
+```
+
 Optional Mode B is fail-closed unless explicitly allowed. With allow + local OSS GMS +
 official MCP over **HTTP**, it performs exactly one live read-only metadata call
 (not production activation). Canonical transport matches the committed live proof:
@@ -46,6 +65,11 @@ official MCP over **HTTP**, it performs exactly one live read-only metadata call
 - transport: HTTP JSON-RPC (`http-jsonrpc-stateless`)
 - MCP URL: `http://127.0.0.1:8000/mcp`
 - GMS: `http://localhost:8080`
+- discovered tools: 8
+- selected tool: `search` (`readOnlyHint=true`)
+- `metadata_call_count=1`
+- attributable entity identity present in proof
+- `consumer_eligibility=PROPOSED`, `human_approval_required=true`
 
 ```bash
 env -u DATAHUB_LOCAL_MCP_ALLOW ./scripts/datahub-judge-demo.sh --mode=local-oss
@@ -62,7 +86,7 @@ env -u DATAHUB_LOCAL_MCP_ALLOW ./scripts/datahub-judge-demo.sh --mode=local-oss
 # ./scripts/datahub-judge-demo.sh --mode=local-oss
 ```
 
-Sanitized historical local-only proof (VERIFIED_LOCAL_ONLY):
+Committed public-main Mode B proof (`VERIFIED_LOCAL_ONLY`):
 `examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json`
 
 Full guide: [docs/datahub-judge-quickstart.md](docs/datahub-judge-quickstart.md)
@@ -70,10 +94,11 @@ Competition index: [docs/competition/datahub-judge-submission-index.md](docs/com
 
 ## Official-MCP recorded-response contract harness
 
-Bounded **official-MCP recorded-response contract harness**: a recorded DataHub MCP read-only response is normalized into a deterministic WorkPacket while preserving attribution, provenance, authority state, fail-closed behavior, and mandatory human approval.
+Bounded **official-MCP recorded-response contract harness** (Mode A): a recorded DataHub MCP read-only response is normalized into a deterministic WorkPacket while preserving attribution, provenance, authority state, fail-closed behavior, and mandatory human approval.
 
-**Recorded MCP read-only contract harness is verified (Mode A).** Optional Mode B can exercise
-the official open-source MCP server against **local DataHub OSS** when explicitly allowed.
+**Mode A is verified in-repo and is not a live invocation claim.** Mode B separately
+verifies the official open-source MCP server against **local DataHub OSS** when
+explicitly allowed; that path is already `VERIFIED_LOCAL_ONLY` on public main.
 
 No production DataHub access, managed Cloud OAuth, DataHub writes, or autonomous execution is claimed.
 
@@ -137,12 +162,15 @@ docs/
   datahub-mcp-readonly-demo.md
   mg-mcp-alignment.md
   competition/
+  fixtures/showcase-ecommerce/
 examples/
   generated-work-packet/
     work-packet.json
   official-mcp-proof/
     read-only-retrieval-summary.json
     local-oss-live-readonly-validation-summary.json
+  showcase-ecommerce/
+    customer-email-normalization/
   sample-pr/
     README.md
 scripts/
@@ -174,6 +202,13 @@ Generated output: `examples/generated-work-packet/work-packet.json`
 
 Input fixture: `fixtures/datahub-context.json`
 
+## Generated development example
+Path: `examples/showcase-ecommerce/customer-email-normalization/`
+
+- Input classification: **SYNTHETIC_FIXTURE** (repository fixture contract `showcase-ecommerce`)
+- Non-destructive SQL + schema + offline validation + `generation-proof.json`
+- `consumer_eligibility=PROPOSED`, `human_approval_required=true`
+
 ## Trust and authority model
 - Authority states: `approved`, `planning_only`, `quarantined`, `unknown`.
 - Missing provenance fails closed.
@@ -194,11 +229,11 @@ Input fixture: `fixtures/datahub-context.json`
 3. Reuse `buildWorkPacket(...)` for bounded review output.
 
 ## Current limitations
-- Default demo and judge Mode A are fixture / recorded-response only.
-- Recorded MCP read-only contract harness is verified in-repo.
-- Optional local OSS Mode B is fail-closed by default; when allowed it uses official
-  `mcp-server-datahub==0.6.0` for exactly one local read. Classification remains
-  VERIFIED_LOCAL_ONLY and is not production activation.
+- Default demo and judge Mode A are fixture / recorded-response only (`MODE_A_RUNTIME=UNKNOWN`).
+- Recorded MCP read-only contract harness is verified in-repo for Mode A.
+- Optional local OSS Mode B is fail-closed by default; public-main verification used official
+  `mcp-server-datahub==0.6.0` for exactly one local read (`MODE_B_RUNTIME=VERIFIED_LOCAL_ONLY`).
+  That is not production activation.
 - Managed Cloud OAuth / production tenant activation is not claimed.
 - No DataHub writes, MG MCP writes, autonomous PR merge, deployment, IAM, or secret mutation paths are included.
 
@@ -215,9 +250,11 @@ This repository is a focused, public proof-of-concept adapter that demonstrates 
   - Adds tests that prove reordered inputs and duplicate provenance are handled deterministically.
   - Adds fixture-driven demo and CI workflow suitable for public review.
   - Adds an official-MCP recorded-response read-only contract harness with committed proof summary.
-  - Adds judge preflight/demo scripts, quickstart, competition evidence index, and sanitized VERIFIED_LOCAL_ONLY local-oss proof packaging.
+  - Adds judge preflight/demo scripts, quickstart, competition evidence index, and public-main Mode B `VERIFIED_LOCAL_ONLY` proof packaging.
   - Ports the optional local DataHub OSS official MCP read-only driver (Mode B) with
     fail-closed allow gate, pinned `mcp-server-datahub==0.6.0`, and exactly one metadata read.
+  - Adds one judge-visible generated development artifact for customer-email normalization
+    under `examples/showcase-ecommerce/customer-email-normalization/` (**SYNTHETIC_FIXTURE**).
 - Baseline vs new-work disclosure: [docs/competition/baseline-new-work-disclosure.md](docs/competition/baseline-new-work-disclosure.md)
 
 ## What remains private
@@ -227,11 +264,12 @@ This repository is a focused, public proof-of-concept adapter that demonstrates 
 ## Competition Evidence
 - Competition: Build with DataHub: The Agent Hackathon
 - Baseline (pre-existing): MG MCP governance and architecture existed prior to this public adapter
-- New public work: hardened deterministic WorkPacket generation and provenance/authority contracts; the public adapter, proofs, and judge packaging were created or hardened during the competition and are packaged here as public-safe evidence.
+- New public work: hardened deterministic WorkPacket generation and provenance/authority contracts; the public adapter, proofs, Mode B local-OSS verification packaging, generated development example, and judge packaging were created or hardened during the competition and are packaged here as public-safe evidence.
 - AI contribution: Copilot coding agent assisted in edits; human reviewers scoped, approved, and validated the public reference implementation and the no-write, fixture-first demo boundary
-- Validation carried out: `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, `npm run demo:json` (JSON parse validation), security scan
-- Pull request: Draft PR #1 on branch `copilot/initial-implementation`
-- Demo video: Not yet recorded
+- Validation carried out: `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, Mode A judge demo, Mode B fail-closed gate, offline generated-artifact validation, security scan
+- Public implementation PRs (merged): `#1` initial reference implementation; `#25` recorded-response harness; `#29` public Mode B local-OSS read-only path
+- Current submission packaging PR: see open `docs/datahub-final-publication-reconciliation-v1` PR on this repository
+- Demo video: prepare from [docs/competition/public-demo-notes.md](docs/competition/public-demo-notes.md) (URL added when published)
 
 ## License
 Apache-2.0 (`LICENSE`)

@@ -32,6 +32,12 @@ already-merged public recorded-response harness (PR #25).
   - canonical judge transport: HTTP at `http://127.0.0.1:8000/mcp` (GMS `http://localhost:8080`)
   - focused tests in `tests/datahub-mcp-local-readonly.test.ts`
 - Explicit baseline/new-work and limitation statements in README.
+- Final public publication reconciliation:
+  - reconciled Mode A (`UNKNOWN`) vs Mode B (`VERIFIED_LOCAL_ONLY`) judge narrative
+  - one judge-visible generated development artifact under
+    `examples/showcase-ecommerce/customer-email-normalization/` (**SYNTHETIC_FIXTURE**)
+  - public-main Mode B proof packaging preserved without additional live metadata calls
+    in the publication lane
 
 ## What remains out of scope / not claimed
 
