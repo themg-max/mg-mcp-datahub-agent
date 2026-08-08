@@ -56,7 +56,7 @@ elif [ "$MODE" = "--mode=local-oss" ]; then
   if ! allow_is_true; then
     echo "BLOCKED: DATAHUB_LOCAL_MCP_ALLOW != true — refusing to contact local MCP or DataHub."
     echo "No MCP request will be issued."
-    echo "Historical sanitized proof (do not treat as re-run): examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json"
+    echo "Committed public-main Mode B proof (do not treat as this fail-closed run): examples/official-mcp-proof/local-oss-live-readonly-validation-summary.json"
     echo "To allow optional local-oss validation when a local stack is ready: export DATAHUB_LOCAL_MCP_ALLOW=true"
     echo "Canonical Mode B transport: HTTP MCP at DATAHUB_LOCAL_MCP_URL=http://127.0.0.1:8000/mcp (GMS http://localhost:8080)"
     exit 3

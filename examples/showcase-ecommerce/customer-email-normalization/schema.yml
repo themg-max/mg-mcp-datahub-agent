@@ -1,0 +1,24 @@
+version: 2
+
+# Proposal-only dbt-style contract for the synthetic showcase-ecommerce
+# customer-email normalization example. Not an executable deployment artifact.
+
+models:
+  - name: customer_email_normalized
+    description: >
+      Synthetic, reviewable projection that preserves customer_id and email_raw
+      while exposing a trim+lowercase email_normalized column. Generated from
+      the committed showcase-ecommerce fixture contract (SYNTHETIC_FIXTURE).
+      Not derived from live Mode B retrieval. Human approval required.
+    columns:
+      - name: customer_id
+        description: Stable synthetic customer identifier (preserved).
+        data_tests:
+          - not_null
+          - unique
+      - name: email_raw
+        description: Original email string retained for audit/review (may be null/blank).
+      - name: email_normalized
+        description: lower(trim(email_raw)); null when raw is null or blank after trim.
+        data_tests:
+          - dbt_utils.not_empty_string

@@ -47,7 +47,8 @@ If build tooling is unavailable, inspect:
 - `README.md`
 
 ## Limitations
-- The demo is synthetic and fixture-based.
-- No production DataHub instance is required or connected.
+- The default demo is synthetic and fixture-based (`MODE_A_RUNTIME=UNKNOWN`).
+- No production DataHub instance is required for Mode A.
 - No repository writes, merges, deployments, or authority promotion occur.
-- Live DataHub endpoint paths are intentionally optional and unverified.
+- Optional Mode B local-OSS official MCP verification is documented separately and is
+  classified `MODE_B_RUNTIME=VERIFIED_LOCAL_ONLY` (not production activation).
